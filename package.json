@@ -1,0 +1,19 @@
+{
+  "name": "sectorama",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w @sectorama/backend\" \"npm run dev -w @sectorama/frontend\"",
+    "build": "npm run build -w @sectorama/shared && npm run build -w @sectorama/backend && npm run build -w @sectorama/frontend",
+    "start": "npm run start -w @sectorama/backend",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2"
+  }
+}

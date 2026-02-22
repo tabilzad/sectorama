@@ -1,0 +1,59 @@
+services:
+  app:
+    image: ghcr.io/tabilzad/sectorama:latest
+    restart: unless-stopped
+    privileged: true            # required: smartctl + fio need raw block device access
+    ports:
+      - "8888:8888"
+    networks:
+      - internal
+    volumes:
+      - app-data:/data          # SQLite DB + other app state
+      - /dev:/dev:ro            # host block devices for smartctl discovery + fio benchmarks
+    environment:
+      - NODE_ENV=production
+      - PORT=8888
+      - SQLITE_PATH=/data/sectorama.db
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=sectorama
+      - INFLUXDB_BUCKET=sectorama
+      - SMART_POLL_INTERVAL_MINUTES=${SMART_POLL_INTERVAL_MINUTES:-60}
+      - BENCHMARK_NUM_POINTS=${BENCHMARK_NUM_POINTS:-11}
+      - DISK_DISCOVERY_MOCK=false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8888/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+  influxdb:
+    image: influxdb:2
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD:-adminpass}
+      - DOCKER_INFLUXDB_INIT_ORG=sectorama
+      - DOCKER_INFLUXDB_INIT_BUCKET=sectorama
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  app-data:
+  influxdb-data:
+
+networks:
+  internal:       # private network for app↔influxdb traffic

@@ -1,0 +1,28 @@
+# Dev only: InfluxDB sidecar. Run with: docker compose -f docker-compose.dev.yml up -d
+# Note: smartctl/fio won't work on Windows Docker Desktop.
+# Set DISK_DISCOVERY_MOCK=true in .env to use synthetic drives for frontend dev.
+
+services:
+  influxdb:
+    image: influxdb:2
+    container_name: sectorama-dev-influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"   # exposed so the local backend (npm run dev) can reach it
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: adminpass
+      DOCKER_INFLUXDB_INIT_ORG: sectorama
+      DOCKER_INFLUXDB_INIT_BUCKET: sectorama
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: dev-token-local
+    volumes:
+      - sectorama-dev-influxdb:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  sectorama-dev-influxdb:
