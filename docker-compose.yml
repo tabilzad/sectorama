@@ -38,6 +38,13 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=sectorama
       - DOCKER_INFLUXDB_INIT_BUCKET=sectorama
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+      # Retention in seconds; 0 = infinite. Default: 180 days (15552000 s).
+      # Only applied on first-time setup when the data volume is empty.
+      # To change retention on an existing bucket:
+      #   docker exec sectorama-influxdb influx bucket update \
+      #     --name sectorama --org sectorama --retention 15552000s \
+      #     --token <your-token>
+      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUXDB_RETENTION_SECONDS:-15552000}
     healthcheck:
       test: ["CMD", "influx", "ping"]
       interval: 10s

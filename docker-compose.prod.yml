@@ -45,6 +45,7 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=sectorama
       - DOCKER_INFLUXDB_INIT_BUCKET=sectorama
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUXDB_RETENTION_SECONDS:-15552000}
     healthcheck:
       test: ["CMD", "influx", "ping"]
       interval: 10s

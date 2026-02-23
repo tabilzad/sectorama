@@ -16,6 +16,7 @@ services:
       DOCKER_INFLUXDB_INIT_ORG: sectorama
       DOCKER_INFLUXDB_INIT_BUCKET: sectorama
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: dev-token-local
+      DOCKER_INFLUXDB_INIT_RETENTION: 15552000  # 180 days
     volumes:
       - sectorama-dev-influxdb:/var/lib/influxdb2
     healthcheck:

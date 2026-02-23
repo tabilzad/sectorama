@@ -25,7 +25,7 @@ export const config = {
   },
 
   smart: {
-    pollIntervalMinutes: parseInt(env('SMART_POLL_INTERVAL_MINUTES', '60'), 10),
+    pollIntervalMinutes: parseInt(env('SMART_POLL_INTERVAL_MINUTES', '5'), 10),
   },
 
   benchmark: {
