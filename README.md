@@ -23,6 +23,8 @@ on your own hardware.
     - Idle latency (P50 / P95 / P99 / P99.9 ns)
 - **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time
 - **Benchmark schedules** — cron-based per-drive or global schedules
+- **Notifications** — alert channels (Webhook, Slack) with per-alert-type subscriptions; transition-only firing (once on
+  condition onset, silent until it clears and re-triggers); per-drive temperature threshold overrides
 - **Live feed** — WebSocket push for real-time benchmark progress and health alerts
 - **Dark UI** — React + Tailwind dashboard; fully responsive
 
@@ -102,27 +104,67 @@ npm run typecheck   # type-check all workspaces without emitting
 
 ## Environment Variables
 
-| Variable                      | Default                 | Description                                                      |
-|-------------------------------|-------------------------|------------------------------------------------------------------|
-| `PORT`                        | `8888`                  | HTTP port the backend listens on                                 |
-| `SQLITE_PATH`                 | `./sectorama.db`        | Path to the SQLite database file                                 |
-| `INFLUXDB_URL`                | `http://localhost:8086` | InfluxDB v2 base URL                                             |
-| `INFLUXDB_TOKEN`              | _(required)_            | InfluxDB API token                                               |
-| `INFLUXDB_ORG`                | `sectorama`             | InfluxDB organisation                                            |
-| `INFLUXDB_BUCKET`             | `sectorama`             | InfluxDB bucket                                                  |
-| `INFLUXDB_ADMIN_PASSWORD`     | `adminpass`             | Admin password for the bundled InfluxDB service                  |
-| `SMART_POLL_INTERVAL_MINUTES` | `60`                    | SMART polling interval (must divide evenly into 60 if < 60)      |
-| `BENCHMARK_NUM_POINTS`        | `11`                    | Number of positions sampled in each position-curve run           |
-| `DISK_DISCOVERY_MOCK`         | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev) |
+| Variable                              | Default                 | Description                                                       |
+|---------------------------------------|-------------------------|-------------------------------------------------------------------|
+| `PORT`                                | `8888`                  | HTTP port the backend listens on                                  |
+| `SQLITE_PATH`                         | `./sectorama.db`        | Path to the SQLite database file                                  |
+| `INFLUXDB_URL`                        | `http://localhost:8086` | InfluxDB v2 base URL                                              |
+| `INFLUXDB_TOKEN`                      | _(required)_            | InfluxDB API token                                                |
+| `INFLUXDB_ORG`                        | `sectorama`             | InfluxDB organisation                                             |
+| `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
+| `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
+| `SMART_POLL_INTERVAL_MINUTES`         | `60`                    | SMART polling interval (must divide evenly into 60 if < 60)       |
+| `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
+| `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
+| `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
 
 ---
 
 ### Data stores
 
-| Store                         | What lives there                                                           |
-|-------------------------------|----------------------------------------------------------------------------|
-| **SQLite** (`better-sqlite3`) | Drive registry, benchmark run metadata, schedules, latest SMART cache      |
-| **InfluxDB v2**               | SMART attribute history, benchmark speed points, benchmark profile results |
+| Store                         | What lives there                                                                                                                        |
+|-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| **SQLite** (`better-sqlite3`) | Drive registry, benchmark run metadata, schedules, latest SMART cache, notification channels, subscriptions, per-drive alert thresholds |
+| **InfluxDB v2**               | SMART attribute history, benchmark speed points, benchmark profile results                                                              |
+
+---
+
+## Notifications
+
+Sectorama can push alerts to external services when a drive's health or temperature crosses a threshold.
+
+### Alert types
+
+| Type          | Fires when…                                                              |
+|---------------|--------------------------------------------------------------------------|
+| `smart_error` | SMART self-assessment transitions from passing → failing                 |
+| `temperature` | Drive temperature transitions from at-or-below the threshold to above it |
+
+Alerts are **transition-only**: they fire once when a condition first occurs and are silent until the condition clears
+and re-triggers. This prevents alert storms on every poll.
+
+### Channel types
+
+| Type      | Config fields                                     |
+|-----------|---------------------------------------------------|
+| `webhook` | URL + optional auth (None / Basic / Bearer token) |
+| `slack`   | Slack Incoming Webhook URL (Block Kit formatting) |
+
+Channels are managed from the **Notifications** page in the UI. Each channel can subscribe to any combination of alert
+types. A test payload can be sent from the UI at any time.
+
+### Temperature thresholds
+
+The global default is set via `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` (default `50`°C). Individual drives can override
+this from the **Alert Settings** section on the Drive Detail → SMART tab.
+
+### Adding a new channel type
+
+1. Create `packages/backend/src/services/notifications/channels/MyChannel.ts` implementing `INotificationChannel`
+2. Add a `case 'mytype'` to `channelFactory.ts`
+3. Add the new `ChannelType` to `@sectorama/shared`
+
+No other files need to change.
 
 ---
 
