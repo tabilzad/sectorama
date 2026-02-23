@@ -282,8 +282,10 @@ export async function getSmartHistory(
   const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
-  const measurement = attrName ? 'smart_attributes' : 'smart_readings';
-  const fieldFilter  = attrName
+  // temperature is a field on smart_readings, not a smart_attribute row
+  const isTemperature = attrName === 'temperature';
+  const measurement = (attrName && !isTemperature) ? 'smart_attributes' : 'smart_readings';
+  const fieldFilter  = (attrName && !isTemperature)
     ? `|> filter(fn: (r) => r.attr_name == "${attrName}")`
     : '';
 

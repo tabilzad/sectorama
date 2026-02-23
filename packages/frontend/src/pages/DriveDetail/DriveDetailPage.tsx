@@ -13,6 +13,15 @@ import ErrorMessage from '../../components/ui/ErrorMessage';
 import { formatBytes } from '../../lib/formatBytes';
 import type { SmartAttribute } from '@sectorama/shared';
 
+function formatPowerOnTime(hours: number | null | undefined): string {
+  if (hours == null) return '—';
+  const days = hours / 24;
+  if (days < 2) return `${hours.toLocaleString()} h`;
+  const years = days / 365.25;
+  if (years < 1) return `${Math.round(days)} d`;
+  return `${years.toFixed(1)} yr`;
+}
+
 type Tab = 'smart' | 'benchmarks' | 'schedules';
 
 export default function DriveDetailPage() {
@@ -127,11 +136,12 @@ export default function DriveDetailPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 {[
                   { label: 'Temperature',          value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
-                  { label: 'Power-On Hours',        value: smart.powerOnHours?.toLocaleString() ?? '—' },
-                  { label: 'Power Cycle Count',     value: smart.powerCycleCount?.toLocaleString() ?? '—' },
-                  { label: 'Reallocated Sectors',   value: smart.reallocatedSectors?.toLocaleString() ?? '—' },
-                  { label: 'Pending Sectors',       value: smart.pendingSectors?.toLocaleString() ?? '—' },
-                  { label: 'Uncorrectable Errors',  value: smart.uncorrectableErrors?.toLocaleString() ?? '—' },
+                  { label: 'Powered On',           value: formatPowerOnTime(smart.powerOnHours) },
+                  { label: 'Power Cycle Count',    value: smart.powerCycleCount?.toLocaleString() ?? '—' },
+                  { label: 'Reallocated Sectors',  value: smart.reallocatedSectors?.toLocaleString() ?? '—' },
+                  { label: 'Pending Sectors',      value: smart.pendingSectors?.toLocaleString() ?? '—' },
+                  { label: 'Uncorrectable Errors', value: smart.uncorrectableErrors?.toLocaleString() ?? '—' },
+                  { label: 'Last Updated',         value: new Date(smart.timestamp).toLocaleString() },
                 ].map(({ label, value }) => (
                   <div key={label} className="card">
                     <p className="text-xs text-gray-500 mb-1">{label}</p>
