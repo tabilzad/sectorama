@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { statsRoutes }  from './public/stats.js';
-import { driveRoutes }  from './drives/index.js';
-import { scheduleRoutes } from './schedules/index.js';
+import { statsRoutes }         from './public/stats.js';
+import { driveRoutes }         from './drives/index.js';
+import { scheduleRoutes }      from './schedules/index.js';
+import { notificationRoutes }  from './notifications/index.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // System stats
@@ -12,6 +13,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // Benchmark schedules
   await app.register(scheduleRoutes);
+
+  // Notification channels, subscriptions, thresholds
+  await app.register(notificationRoutes);
 
   // Health check
   app.get('/api/v1/health', async (_req, reply) => {

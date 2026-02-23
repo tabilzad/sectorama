@@ -21,6 +21,7 @@ services:
       - SMART_POLL_INTERVAL_MINUTES=${SMART_POLL_INTERVAL_MINUTES:-60}
       - BENCHMARK_NUM_POINTS=${BENCHMARK_NUM_POINTS:-11}
       - DISK_DISCOVERY_MOCK=false
+      - TEMPERATURE_ALERT_THRESHOLD_CELSIUS=${TEMPERATURE_ALERT_THRESHOLD_CELSIUS:-50}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8888/api/v1/health || exit 1"]
       interval: 30s

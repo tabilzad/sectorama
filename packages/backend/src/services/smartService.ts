@@ -7,6 +7,7 @@ import { drives, smartCache } from '../db/schema.js';
 import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
+import { evaluateAndNotify } from './notifications/notificationService.js';
 import type { SmartReading, SmartAttribute, DriveHealth } from '@sectorama/shared';
 import type { DriveRow } from '../db/schema.js';
 
@@ -263,6 +264,7 @@ export async function scheduledSmartPoll(driveId: number): Promise<SmartReading 
   if (!driveRow) return null;
 
   const reading = await readSmartFromDrive(driveId, driveRow);
+  await evaluateAndNotify(driveId, reading);   // reads old cache before update
   await updateSmartCache(driveId, reading);
   await writeSmartToInflux(driveRow, reading);
 

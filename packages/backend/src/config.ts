@@ -36,6 +36,10 @@ export const config = {
     mock: env('DISK_DISCOVERY_MOCK', 'false') === 'true',
   },
 
+  notifications: {
+    defaultTempThresholdCelsius: parseInt(env('TEMPERATURE_ALERT_THRESHOLD_CELSIUS', '50'), 10),
+  },
+
   paths: {
     /** Built React SPA — served as static files by Fastify */
     public: env('PUBLIC_PATH', path.resolve(process.cwd(), 'public')),

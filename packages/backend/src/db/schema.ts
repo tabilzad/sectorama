@@ -3,6 +3,7 @@ import {
   integer,
   text,
   real,
+  uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
@@ -67,6 +68,30 @@ export const smartCache = sqliteTable('smart_cache', {
   healthPassed:        integer('health_passed', { mode: 'boolean' }),
 });
 
+// ─── Notification Channels ────────────────────────────────────────────────────
+
+export const notificationChannels = sqliteTable('notification_channels', {
+  id:        integer('id').primaryKey({ autoIncrement: true }),
+  name:      text('name').notNull(),
+  type:      text('type').notNull(),            // 'webhook' | 'slack'
+  config:    text('config').notNull().default('{}'), // JSON blob
+  enabled:   integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+});
+
+export const notificationSubscriptions = sqliteTable('notification_subscriptions', {
+  id:        integer('id').primaryKey({ autoIncrement: true }),
+  channelId: integer('channel_id').notNull()
+               .references(() => notificationChannels.id, { onDelete: 'cascade' }),
+  alertType: text('alert_type').notNull(), // 'smart_error' | 'temperature'
+}, (t) => [uniqueIndex('uq_sub').on(t.channelId, t.alertType)]);
+
+export const driveAlertThresholds = sqliteTable('drive_alert_thresholds', {
+  driveId:                     integer('drive_id').primaryKey()
+                                 .references(() => drives.driveId, { onDelete: 'cascade' }),
+  temperatureThresholdCelsius: integer('temperature_threshold_celsius').notNull(),
+});
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const drivesRelations = relations(drives, ({ one, many }) => ({
@@ -89,10 +114,13 @@ export const smartCacheRelations = relations(smartCache, ({ one }) => ({
 
 // ─── Type exports ─────────────────────────────────────────────────────────────
 
-export type DriveRow             = typeof drives.$inferSelect;
-export type NewDriveRow          = typeof drives.$inferInsert;
-export type BenchmarkRunRow      = typeof benchmarkRuns.$inferSelect;
-export type NewBenchmarkRunRow   = typeof benchmarkRuns.$inferInsert;
-export type ScheduleRow          = typeof benchmarkSchedules.$inferSelect;
-export type NewScheduleRow       = typeof benchmarkSchedules.$inferInsert;
-export type SmartCacheRow        = typeof smartCache.$inferSelect;
+export type DriveRow                      = typeof drives.$inferSelect;
+export type NewDriveRow                   = typeof drives.$inferInsert;
+export type BenchmarkRunRow               = typeof benchmarkRuns.$inferSelect;
+export type NewBenchmarkRunRow            = typeof benchmarkRuns.$inferInsert;
+export type ScheduleRow                   = typeof benchmarkSchedules.$inferSelect;
+export type NewScheduleRow                = typeof benchmarkSchedules.$inferInsert;
+export type SmartCacheRow                 = typeof smartCache.$inferSelect;
+export type NotificationChannelRow        = typeof notificationChannels.$inferSelect;
+export type NotificationSubscriptionRow   = typeof notificationSubscriptions.$inferSelect;
+export type DriveAlertThresholdRow        = typeof driveAlertThresholds.$inferSelect;

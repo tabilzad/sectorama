@@ -81,6 +81,27 @@ export function initDb(): void {
       uncorrectable_errors  INTEGER,
       health_passed         INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS notification_channels (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL,
+      type        TEXT    NOT NULL,
+      config      TEXT    NOT NULL DEFAULT '{}',
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT    NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_subscriptions (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id  INTEGER NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+      alert_type  TEXT    NOT NULL,
+      UNIQUE(channel_id, alert_type)
+    );
+
+    CREATE TABLE IF NOT EXISTS drive_alert_thresholds (
+      drive_id                        INTEGER PRIMARY KEY REFERENCES drives(drive_id) ON DELETE CASCADE,
+      temperature_threshold_celsius   INTEGER NOT NULL
+    );
   `);
 }
 

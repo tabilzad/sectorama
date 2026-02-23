@@ -61,9 +61,10 @@ export default function Layout() {
             {/* Nav links */}
             <nav className="flex items-center gap-1">
               {[
-                { to: '/',             label: 'Dashboard', end: true },
-                { to: '/smart',        label: 'SMART History' },
-                { to: '/schedules',    label: 'Schedules' },
+                { to: '/',               label: 'Dashboard',    end: true },
+                { to: '/smart',          label: 'SMART History' },
+                { to: '/schedules',      label: 'Schedules' },
+                { to: '/notifications',  label: 'Notifications' },
               ].map(({ to, label, end }) => (
                 <NavLink
                   key={to}

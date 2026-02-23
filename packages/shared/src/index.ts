@@ -166,6 +166,48 @@ export interface SystemStats {
   lastScanTime: string | null;  // ISO 8601
 }
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export type AlertType   = 'smart_error' | 'temperature';
+export type ChannelType = 'webhook' | 'slack';
+
+export interface WebhookChannelConfig {
+  url: string;
+  auth:
+    | { type: 'none' }
+    | { type: 'basic';  username: string; password: string }
+    | { type: 'bearer'; token: string };
+}
+export interface SlackChannelConfig { webhookUrl: string; }
+
+export interface NotificationChannel {
+  id: number;
+  name: string;
+  type: ChannelType;
+  config: WebhookChannelConfig | SlackChannelConfig;
+  enabled: boolean;
+  createdAt: string;
+}
+export interface NotificationSubscription {
+  id: number;
+  channelId: number;
+  alertType: AlertType;
+}
+export interface DriveAlertThreshold {
+  driveId: number;
+  temperatureThresholdCelsius: number;
+}
+export interface Alert {
+  type: AlertType;
+  driveId: number;
+  driveSerial: string;
+  driveModel: string;
+  message: string;
+  value?: number;
+  threshold?: number;
+  timestamp: string;
+}
+
 // ─── WebSocket live-feed ─────────────────────────────────────────────────────
 
 export interface DiskDetectedEvent {
