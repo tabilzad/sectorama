@@ -10,7 +10,7 @@ import { registerRoutes } from './routes/index.js';
 import { registerLiveFeed } from './ws/liveFeed.js';
 import { initScheduler, initSmartPoller } from './services/scheduler.js';
 import { scanDisks, registerDrives } from './services/diskDiscovery.js';
-import { pollAllSmart } from './services/smartService.js';
+import { refreshAllSmart } from './services/smartService.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -92,11 +92,12 @@ async function main() {
     console.warn('[sectorama] Initial disk scan failed (non-fatal):', err);
   }
 
-  // ── Initial SMART poll ────────────────────────────────────────────────────
+  // ── Initial SMART cache warm-up (read + SQLite only, no InfluxDB) ─────────
+  // The scheduler's first tick at SMART_POLL_INTERVAL_MINUTES will be the first InfluxDB write.
   try {
-    await pollAllSmart();
+    await refreshAllSmart();
   } catch (err) {
-    console.warn('[sectorama] Initial SMART poll failed (non-fatal):', err);
+    console.warn('[sectorama] SMART cache warm-up failed (non-fatal):', err);
   }
 
   // ── Start schedulers ──────────────────────────────────────────────────────

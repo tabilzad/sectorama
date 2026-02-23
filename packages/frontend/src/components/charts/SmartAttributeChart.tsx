@@ -37,7 +37,7 @@ export default function SmartAttributeChart({ points, attrName, height = 280 }: 
         {attrName} — {points.length} data point{points.length !== 1 ? 's' : ''}
       </p>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={data} margin={{ top: 5, right: 20, bottom: 30, left: 20 }}>
+        <LineChart data={data} margin={{ top: 5, right: 20, bottom: 50, left: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#333345" />
           <XAxis
             dataKey="time"
@@ -56,7 +56,7 @@ export default function SmartAttributeChart({ points, attrName, height = 280 }: 
             labelStyle={{ color: '#999' }}
             labelFormatter={val => FORMAT_DATE(val as string)}
           />
-          <Legend wrapperStyle={{ color: '#999', fontSize: 12 }} />
+          <Legend verticalAlign="top" wrapperStyle={{ color: '#999', fontSize: 12, paddingBottom: 8 }} />
           <Line
             type="monotone"
             dataKey="value"

@@ -3,7 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import { getDb } from '../../db/index.js';
 import { drives, benchmarkRuns, smartCache as smartCacheTable } from '../../db/schema.js';
 import { scanDisks, registerDrives, getDriveSummaries } from '../../services/diskDiscovery.js';
-import { pollSmartForDrive, getSmartHistory } from '../../services/smartService.js';
+import { refreshSmartForDrive, getSmartHistory } from '../../services/smartService.js';
 import { createRun, executeBenchmark, getRunDetail, getDriveSeries, deleteRun, purgeAllRuns } from '../../services/benchmarkEngine.js';
 import { config } from '../../config.js';
 import type {
@@ -57,8 +57,7 @@ export async function driveRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { driveId: string }; Reply: SmartReading }>('/api/v1/disks/:driveId/smart', async (req, reply) => {
     const driveId = parseInt(req.params.driveId, 10);
 
-    // Trigger a fresh poll
-    const reading = await pollSmartForDrive(driveId);
+    const reading = await refreshSmartForDrive(driveId);
     if (!reading) return reply.status(404).send({ error: 'Drive not found' } as any);
     return reply.send(reading);
   });

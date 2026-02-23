@@ -4,11 +4,13 @@ import type { SmartReading } from '@sectorama/shared';
 
 export function useSmartData(driveId: number | null) {
   return useQuery<SmartReading>({
-    queryKey:        ['smart', driveId],
-    queryFn:         () => api.get<SmartReading>(`/disks/${driveId}/smart`).then(r => r.data),
-    enabled:         driveId !== null,
-    staleTime:       5 * 60 * 1_000,
-    refetchInterval: 5 * 60 * 1_000,
+    queryKey:  ['smart', driveId],
+    queryFn:   () => api.get<SmartReading>(`/disks/${driveId}/smart`).then(r => r.data),
+    enabled:   driveId !== null,
+    // The WS live-feed pushes the full SmartReading on every scheduled poll via
+    // queryClient.setQueryData — no polling needed here. staleTime: Infinity prevents
+    // React Query from re-fetching on window focus or component remount.
+    staleTime: Infinity,
   });
 }
 

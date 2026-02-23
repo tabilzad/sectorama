@@ -55,6 +55,9 @@ export function useLiveFeed(): LiveFeedState {
 
           if (event.type === 'smart_updated') {
             setLastSmartEvent(event);
+            // Push the full reading directly into the query cache — avoids an HTTP round-trip.
+            // Any component using useSmartData(driveId) will re-render with fresh data immediately.
+            queryClient.setQueryData(['smart', event.driveId], event.reading);
             void queryClient.invalidateQueries({ queryKey: ['disks'] });
             void queryClient.invalidateQueries({ queryKey: ['stats'] });
           }

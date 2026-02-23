@@ -183,6 +183,8 @@ export interface SmartUpdatedEvent {
   driveId: number;
   health: DriveHealth;
   temperature: number | null;
+  /** Full reading pushed with the event so the frontend can skip an HTTP round-trip. */
+  reading: SmartReading;
 }
 
 export interface BenchmarkStartedEvent {

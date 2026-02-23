@@ -8,6 +8,7 @@ import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import type { SmartReading, SmartAttribute, DriveHealth } from '@sectorama/shared';
+import type { DriveRow } from '../db/schema.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -46,7 +47,7 @@ interface SmartctlXallResult {
   };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Private parsing helpers ─────────────────────────────────────────────────
 
 async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> {
   try {
@@ -67,13 +68,13 @@ async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> 
 
 function parseAtaAttributes(table: AtaAttribute[]): SmartAttribute[] {
   return table.map(a => ({
-    attrId:   a.id,
-    name:     a.name,
-    value:    a.value,
-    worst:    a.worst,
+    attrId:    a.id,
+    name:      a.name,
+    value:     a.value,
+    worst:     a.worst,
     threshold: a.thresh,
-    rawValue: a.raw.value,
-    failing:  a.when_failed !== '' && a.when_failed !== '-',
+    rawValue:  a.raw.value,
+    failing:   a.when_failed !== '' && a.when_failed !== '-',
   }));
 }
 
@@ -82,11 +83,11 @@ function parseNvmeAttributes(log: NonNullable<SmartctlXallResult['nvme_smart_hea
   const add = (id: number, name: string, value: number) =>
     attrs.push({ attrId: id, name, value, worst: value, threshold: 0, rawValue: value, failing: false });
 
-  if (log.available_spare !== undefined)  add(1, 'Available Spare %', log.available_spare);
-  if (log.percentage_used !== undefined)  add(2, 'Percentage Used', log.percentage_used);
-  if (log.media_errors !== undefined)     add(3, 'Media Errors', log.media_errors);
-  if (log.num_err_log_entries !== undefined) add(4, 'Error Log Entries', log.num_err_log_entries);
-  if (log.unsafe_shutdowns !== undefined) add(5, 'Unsafe Shutdowns', log.unsafe_shutdowns);
+  if (log.available_spare !== undefined)     add(1, 'Available Spare %',        log.available_spare);
+  if (log.percentage_used !== undefined)     add(2, 'Percentage Used',          log.percentage_used);
+  if (log.media_errors !== undefined)        add(3, 'Media Errors',             log.media_errors);
+  if (log.num_err_log_entries !== undefined) add(4, 'Error Log Entries',        log.num_err_log_entries);
+  if (log.unsafe_shutdowns !== undefined)    add(5, 'Unsafe Shutdowns',         log.unsafe_shutdowns);
   if (log.controller_busy_time !== undefined) add(6, 'Controller Busy Time (min)', log.controller_busy_time);
   return attrs;
 }
@@ -105,123 +106,74 @@ function deriveHealth(
   return 'unknown';
 }
 
-// ─── Mock SMART data ─────────────────────────────────────────────────────────
+// ─── Private pipeline stages ─────────────────────────────────────────────────
 
-function buildMockReading(driveId: number, devicePath: string): SmartReading {
-  const base = devicePath.endsWith('0') ? 38 : devicePath.endsWith('1') ? 32 : 40;
-  return {
-    driveId,
-    timestamp:          new Date().toISOString(),
-    temperature:        base + Math.round(Math.random() * 4),
-    powerOnHours:       8760 + Math.floor(Math.random() * 100),
-    powerCycleCount:    350 + Math.floor(Math.random() * 10),
-    reallocatedSectors: 0,
-    pendingSectors:     0,
-    uncorrectableErrors: 0,
-    healthPassed:       true,
-    attributes: [],
-  };
-}
-
-// ─── Public API ──────────────────────────────────────────────────────────────
-
-/** Poll SMART data for one drive and write to InfluxDB + SQLite cache */
-export async function pollSmartForDrive(driveId: number): Promise<SmartReading | null> {
-  const db = getDb();
-  const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
-  if (!driveRow) return null;
-
-  const now = new Date().toISOString();
-
-  let reading: SmartReading;
+/** Stage 1: Read SMART data from the device (or return mock data). Pure I/O, no side effects. */
+async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<SmartReading> {
   if (config.disk.mock) {
-    reading = buildMockReading(driveId, driveRow.devicePath);
-  } else {
-    const result = await runSmartctlXall(driveRow.devicePath);
-
-    // Parse temperature
-    const temperature = result.temperature?.current ?? null;
-
-    // Parse power stats
-    const powerOnHours     = result.power_on_time?.hours ?? null;
-    const powerCycleCount  = result.power_cycle_count ?? null;
-    const healthPassed     = result.smart_status?.passed ?? null;
-
-    // Parse attributes — SATA vs NVMe
-    let attributes: SmartAttribute[] = [];
-    let reallocatedSectors: number | null  = null;
-    let pendingSectors: number | null      = null;
-    let uncorrectableErrors: number | null = null;
-
-    const ataTable = result.ata_smart_attributes?.table;
-    const nvmeLog  = result.nvme_smart_health_information_log;
-
-    if (ataTable) {
-      attributes = parseAtaAttributes(ataTable);
-      reallocatedSectors  = attributes.find(a => a.attrId === 5)?.rawValue   ?? null;
-      pendingSectors      = attributes.find(a => a.attrId === 197)?.rawValue ?? null;
-      uncorrectableErrors = attributes.find(a => a.attrId === 198)?.rawValue ?? null;
-    } else if (nvmeLog) {
-      attributes          = parseNvmeAttributes(nvmeLog);
-      reallocatedSectors  = nvmeLog.media_errors ?? null;
-      uncorrectableErrors = nvmeLog.num_err_log_entries ?? null;
-    }
-
-    reading = {
+    const base = driveRow.devicePath.endsWith('0') ? 38
+               : driveRow.devicePath.endsWith('1') ? 32 : 40;
+    return {
       driveId,
-      timestamp:          now,
-      temperature,
-      powerOnHours,
-      powerCycleCount,
-      reallocatedSectors,
-      pendingSectors,
-      uncorrectableErrors,
-      healthPassed,
-      attributes,
+      timestamp:          new Date().toISOString(),
+      temperature:        base + Math.round(Math.random() * 4),
+      powerOnHours:       8760 + Math.floor(Math.random() * 100),
+      powerCycleCount:    350 + Math.floor(Math.random() * 10),
+      reallocatedSectors: 0,
+      pendingSectors:     0,
+      uncorrectableErrors: 0,
+      healthPassed:       true,
+      attributes:         [],
     };
   }
 
-  // ── Write to InfluxDB ──────────────────────────────────────────────────────
-  const writeApi = getWriteApi();
-  const ts = new Date(reading.timestamp).getTime();
+  const result = await runSmartctlXall(driveRow.devicePath);
 
-  const healthPoint = new Point('smart_readings')
-    .tag('serial',  driveRow.serialNumber)
-    .tag('vendor',  driveRow.vendor)
-    .tag('model',   driveRow.model)
-    .tag('device',  driveRow.devicePath)
-    .timestamp(ts);
+  const temperature     = result.temperature?.current ?? null;
+  const powerOnHours    = result.power_on_time?.hours ?? null;
+  const powerCycleCount = result.power_cycle_count ?? null;
+  const healthPassed    = result.smart_status?.passed ?? null;
 
-  if (reading.temperature       !== null) healthPoint.floatField('temperature',          reading.temperature);
-  if (reading.powerOnHours      !== null) healthPoint.intField('power_on_hours',         reading.powerOnHours);
-  if (reading.powerCycleCount   !== null) healthPoint.intField('power_cycle_count',       reading.powerCycleCount);
-  if (reading.reallocatedSectors !== null) healthPoint.intField('reallocated_sectors',   reading.reallocatedSectors);
-  if (reading.pendingSectors    !== null) healthPoint.intField('pending_sectors',         reading.pendingSectors);
-  if (reading.uncorrectableErrors !== null) healthPoint.intField('uncorrectable_errors', reading.uncorrectableErrors);
-  if (reading.healthPassed      !== null) healthPoint.booleanField('health_passed',       reading.healthPassed);
-  writeApi.writePoint(healthPoint);
+  let attributes: SmartAttribute[] = [];
+  let reallocatedSectors: number | null  = null;
+  let pendingSectors: number | null      = null;
+  let uncorrectableErrors: number | null = null;
 
-  for (const attr of reading.attributes) {
-    const attrPoint = new Point('smart_attributes')
-      .tag('serial',    driveRow.serialNumber)
-      .tag('attr_id',   String(attr.attrId))
-      .tag('attr_name', attr.name)
-      .intField('value',      attr.value)
-      .intField('worst',      attr.worst)
-      .intField('threshold',  attr.threshold)
-      .intField('raw_value',  attr.rawValue)
-      .booleanField('failing', attr.failing)
-      .timestamp(ts);
-    writeApi.writePoint(attrPoint);
+  const ataTable = result.ata_smart_attributes?.table;
+  const nvmeLog  = result.nvme_smart_health_information_log;
+
+  if (ataTable) {
+    attributes          = parseAtaAttributes(ataTable);
+    reallocatedSectors  = attributes.find(a => a.attrId === 5)?.rawValue   ?? null;
+    pendingSectors      = attributes.find(a => a.attrId === 197)?.rawValue ?? null;
+    uncorrectableErrors = attributes.find(a => a.attrId === 198)?.rawValue ?? null;
+  } else if (nvmeLog) {
+    attributes          = parseNvmeAttributes(nvmeLog);
+    reallocatedSectors  = nvmeLog.media_errors ?? null;
+    uncorrectableErrors = nvmeLog.num_err_log_entries ?? null;
   }
 
-  await writeApi.flush();
+  return {
+    driveId,
+    timestamp: new Date().toISOString(),
+    temperature,
+    powerOnHours,
+    powerCycleCount,
+    reallocatedSectors,
+    pendingSectors,
+    uncorrectableErrors,
+    healthPassed,
+    attributes,
+  };
+}
 
-  // ── Update SQLite smart_cache ──────────────────────────────────────────────
-  const db2 = getDb();
-  await db2.insert(smartCache)
+/** Stage 2: Persist the latest reading snapshot to the SQLite cache. */
+async function updateSmartCache(driveId: number, reading: SmartReading): Promise<void> {
+  const db = getDb();
+  const now = reading.timestamp;
+  await db.insert(smartCache)
     .values({
-      driveId:             driveId,
+      driveId,
       polledAt:            now,
       temperature:         reading.temperature,
       powerOnHours:        reading.powerOnHours,
@@ -244,20 +196,107 @@ export async function pollSmartForDrive(driveId: number): Promise<SmartReading |
         healthPassed:        reading.healthPassed,
       },
     });
+}
 
-  // ── Broadcast WebSocket event ──────────────────────────────────────────────
+/** Stage 3: Write a reading to InfluxDB (scheduled polls only). */
+async function writeSmartToInflux(driveRow: DriveRow, reading: SmartReading): Promise<void> {
+  const writeApi = getWriteApi();
+  const ts = new Date(reading.timestamp).getTime();
+
+  const healthPoint = new Point('smart_readings')
+    .tag('serial', driveRow.serialNumber)
+    .tag('vendor', driveRow.vendor)
+    .tag('model',  driveRow.model)
+    .tag('device', driveRow.devicePath)
+    .timestamp(ts);
+
+  if (reading.temperature        !== null) healthPoint.floatField('temperature',         reading.temperature);
+  if (reading.powerOnHours       !== null) healthPoint.intField('power_on_hours',        reading.powerOnHours);
+  if (reading.powerCycleCount    !== null) healthPoint.intField('power_cycle_count',     reading.powerCycleCount);
+  if (reading.reallocatedSectors !== null) healthPoint.intField('reallocated_sectors',   reading.reallocatedSectors);
+  if (reading.pendingSectors     !== null) healthPoint.intField('pending_sectors',       reading.pendingSectors);
+  if (reading.uncorrectableErrors !== null) healthPoint.intField('uncorrectable_errors', reading.uncorrectableErrors);
+  if (reading.healthPassed       !== null) healthPoint.booleanField('health_passed',     reading.healthPassed);
+  writeApi.writePoint(healthPoint);
+
+  for (const attr of reading.attributes) {
+    const attrPoint = new Point('smart_attributes')
+      .tag('serial',    driveRow.serialNumber)
+      .tag('attr_id',   String(attr.attrId))
+      .tag('attr_name', attr.name)
+      .intField('value',       attr.value)
+      .intField('worst',       attr.worst)
+      .intField('threshold',   attr.threshold)
+      .intField('raw_value',   attr.rawValue)
+      .booleanField('failing', attr.failing)
+      .timestamp(ts);
+    writeApi.writePoint(attrPoint);
+  }
+
+  await writeApi.flush();
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Read fresh SMART data from the device and update the SQLite cache.
+ * Does NOT write to InfluxDB and does NOT broadcast a WS event.
+ * Use this for on-demand API requests where the caller just wants current data.
+ */
+export async function refreshSmartForDrive(driveId: number): Promise<SmartReading | null> {
+  const db = getDb();
+  const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
+  if (!driveRow) return null;
+
+  const reading = await readSmartFromDrive(driveId, driveRow);
+  await updateSmartCache(driveId, reading);
+  return reading;
+}
+
+/**
+ * Full scheduled poll for one drive: read → cache → InfluxDB → broadcast.
+ * Only call this from the scheduler. This is the sole writer to InfluxDB for SMART data.
+ */
+export async function scheduledSmartPoll(driveId: number): Promise<SmartReading | null> {
+  const db = getDb();
+  const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
+  if (!driveRow) return null;
+
+  const reading = await readSmartFromDrive(driveId, driveRow);
+  await updateSmartCache(driveId, reading);
+  await writeSmartToInflux(driveRow, reading);
+
   const health = deriveHealth(
     reading.healthPassed,
     reading.reallocatedSectors,
     reading.pendingSectors,
     reading.uncorrectableErrors,
   );
-  broadcast({ type: 'smart_updated', driveId, health, temperature: reading.temperature });
+  // Broadcast the full reading so connected clients can update without an extra HTTP round-trip
+  broadcast({ type: 'smart_updated', driveId, health, temperature: reading.temperature, reading });
 
   return reading;
 }
 
-/** Poll SMART for all connected drives */
+/**
+ * Warm up the SQLite cache for all connected drives on startup.
+ * Does NOT write to InfluxDB — the scheduler's first tick handles that.
+ */
+export async function refreshAllSmart(): Promise<void> {
+  const db = getDb();
+  const connectedDrives = await db.query.drives.findMany({
+    where: eq(drives.isConnected, true),
+  });
+  for (const drive of connectedDrives) {
+    try {
+      await refreshSmartForDrive(drive.driveId);
+    } catch (err) {
+      console.warn(`[smartService] SMART cache warm-up failed for ${drive.devicePath}:`, err);
+    }
+  }
+}
+
+/** Run a full scheduled poll for all connected drives. */
 export async function pollAllSmart(): Promise<void> {
   const db = getDb();
   const connectedDrives = await db.query.drives.findMany({
@@ -265,7 +304,7 @@ export async function pollAllSmart(): Promise<void> {
   });
   for (const drive of connectedDrives) {
     try {
-      await pollSmartForDrive(drive.driveId);
+      await scheduledSmartPoll(drive.driveId);
     } catch (err) {
       console.warn(`[smartService] SMART poll failed for ${drive.devicePath}:`, err);
     }
@@ -284,8 +323,8 @@ export async function getSmartHistory(
 
   // temperature is a field on smart_readings, not a smart_attribute row
   const isTemperature = attrName === 'temperature';
-  const measurement = (attrName && !isTemperature) ? 'smart_attributes' : 'smart_readings';
-  const fieldFilter  = (attrName && !isTemperature)
+  const measurement   = (attrName && !isTemperature) ? 'smart_attributes' : 'smart_readings';
+  const fieldFilter   = (attrName && !isTemperature)
     ? `|> filter(fn: (r) => r.attr_name == "${attrName}")`
     : '';
 
