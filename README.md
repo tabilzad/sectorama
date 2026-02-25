@@ -44,7 +44,7 @@ curl -O https://raw.githubusercontent.com/tabilzad/sectorama/master/docker-compo
 export INFLUXDB_TOKEN=change-me-strong-random-secret
 # optional — defaults shown
 export INFLUXDB_ADMIN_PASSWORD=adminpass
-export SMART_POLL_INTERVAL_MINUTES=60
+export SMART_POLL_INTERVAL_MINUTES=5
 export BENCHMARK_NUM_POINTS=11
 ```
 
@@ -62,17 +62,6 @@ Open **http://localhost:8888**, click **Scan for Drives**, then run a benchmark 
 ---
 
 ## Development Setup
-
-### Prerequisites
-
-| Tool            | Version                               |
-|-----------------|---------------------------------------|
-| Node.js         | 22 LTS                                |
-| Docker          | 24+ (for InfluxDB sidecar)            |
-| `fio`           | any recent (Linux only for real runs) |
-| `smartmontools` | any recent (Linux only)               |
-
-### Steps
 
 ```bash
 # 1. Clone
@@ -113,7 +102,7 @@ npm run typecheck   # type-check all workspaces without emitting
 | `INFLUXDB_ORG`                        | `sectorama`             | InfluxDB organisation                                             |
 | `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
 | `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
-| `SMART_POLL_INTERVAL_MINUTES`         | `60`                    | SMART polling interval (must divide evenly into 60 if < 60)       |
+| `SMART_POLL_INTERVAL_MINUTES`         | `5`                     | SMART polling interval                                            |
 | `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
 | `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
