@@ -88,7 +88,7 @@ async function runSmartctl(args: string[]): Promise<unknown> {
   } catch (err: unknown) {
     // smartctl exits non-zero for warnings; try to parse stdout anyway
     const execErr = err as { stdout?: string; stderr?: string; code?: number };
-    console.warn(
+    console.error(
       `[diskDiscovery] smartctl ${args.join(' ')} exited code=${execErr.code ?? '?'}`,
       execErr.stderr ? `\n  stderr: ${execErr.stderr.trim()}` : '',
     );
@@ -159,7 +159,7 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
             console.log(`[diskDiscovery] ${dev.name}: smartctl missing capacity, got ${capacity} bytes from sysfs`);
           }
         } catch {
-          console.warn(`[diskDiscovery] ${dev.name}: could not read capacity from sysfs`);
+          console.error(`[diskDiscovery] ${dev.name}: could not read capacity from sysfs`);
         }
       }
 
@@ -178,7 +178,7 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
       });
     } catch (err) {
       const e = err as { code?: number; stderr?: string; message?: string };
-      console.warn(
+      console.error(
         `[diskDiscovery] Skipping ${dev.name} (exit code=${e.code ?? '?'}): ${e.message ?? String(err)}`,
         e.stderr ? `\n  stderr: ${e.stderr.trim()}` : '',
       );

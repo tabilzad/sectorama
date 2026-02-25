@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
+import { API } from '../endpoints';
 import type { SmartReading } from '@sectorama/shared';
 
 export function useSmartData(driveId: number | null) {
   return useQuery<SmartReading>({
     queryKey:  ['smart', driveId],
-    queryFn:   () => api.get<SmartReading>(`/disks/${driveId}/smart`).then(r => r.data),
+    queryFn:   () => api.get<SmartReading>(API.disks.smart(driveId!)).then(r => r.data),
     enabled:   driveId !== null,
     // The WS live-feed pushes the full SmartReading on every scheduled poll via
     // queryClient.setQueryData — no polling needed here. staleTime: Infinity prevents
@@ -23,7 +24,7 @@ export function useSmartHistory(
   return useQuery({
     queryKey:  ['smart-history', driveId, attr, from, to],
     queryFn:   () =>
-      api.get(`/disks/${driveId}/smart/history`, { params: { attr, from, to } }).then(r => r.data),
+      api.get(API.disks.smartHistory(driveId!), { params: { attr, from, to } }).then(r => r.data),
     enabled:   driveId !== null,
     staleTime: 60 * 1_000,
   });

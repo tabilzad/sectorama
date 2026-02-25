@@ -8,7 +8,8 @@ import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
-import type { SmartReading, SmartAttribute, DriveHealth } from '@sectorama/shared';
+import { deriveHealth } from '../utils/health.js';
+import type { SmartReading, SmartAttribute } from '@sectorama/shared';
 import type { DriveRow } from '../db/schema.js';
 
 const execFileAsync = promisify(execFile);
@@ -56,7 +57,7 @@ async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> 
     return JSON.parse(stdout) as SmartctlXallResult;
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number };
-    console.warn(
+    console.error(
       `[smartService] smartctl --xall --json ${devicePath} exited code=${e.code ?? '?'}`,
       e.stderr ? `\n  stderr: ${e.stderr.trim()}` : '',
     );
@@ -91,20 +92,6 @@ function parseNvmeAttributes(log: NonNullable<SmartctlXallResult['nvme_smart_hea
   if (log.unsafe_shutdowns !== undefined)    add(5, 'Unsafe Shutdowns',         log.unsafe_shutdowns);
   if (log.controller_busy_time !== undefined) add(6, 'Controller Busy Time (min)', log.controller_busy_time);
   return attrs;
-}
-
-function deriveHealth(
-  passed: boolean | null | undefined,
-  reallocated: number | null,
-  pending: number | null,
-  uncorrectable: number | null,
-): DriveHealth {
-  if (passed === false) return 'failed';
-  if ((reallocated && reallocated > 0) || (pending && pending > 5) || (uncorrectable && uncorrectable > 0)) {
-    return 'warning';
-  }
-  if (passed === true) return 'ok';
-  return 'unknown';
 }
 
 // ─── Private pipeline stages ─────────────────────────────────────────────────
@@ -293,7 +280,7 @@ export async function refreshAllSmart(): Promise<void> {
     try {
       await refreshSmartForDrive(drive.driveId);
     } catch (err) {
-      console.warn(`[smartService] SMART cache warm-up failed for ${drive.devicePath}:`, err);
+      console.error(`[smartService] SMART cache warm-up failed for ${drive.devicePath}:`, err);
     }
   }
 }
@@ -308,7 +295,7 @@ export async function pollAllSmart(): Promise<void> {
     try {
       await scheduledSmartPoll(drive.driveId);
     } catch (err) {
-      console.warn(`[smartService] SMART poll failed for ${drive.devicePath}:`, err);
+      console.error(`[smartService] SMART poll failed for ${drive.devicePath}:`, err);
     }
   }
 }

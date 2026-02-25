@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDrive } from '../../api/hooks/useDisks';
 import { useSmartData } from '../../api/hooks/useSmart';
 import { useDriveBenchmarks, useDriveBenchmarkSeries, useBenchmarkRun, useRunBenchmark, useBenchmarkProgress, useDeleteBenchmarkRun, usePurgeBenchmarks } from '../../api/hooks/useBenchmarks';
-import { useSchedules, useCreateSchedule, useDeleteSchedule } from '../../api/hooks/useSchedules';
-import { useAlertThresholds, useUpdateAlertThreshold, useDeleteAlertThreshold } from '../../api/hooks/useNotifications';
 import HealthBadge from '../../components/ui/HealthBadge';
 import SpeedCurveChart from '../../components/charts/SpeedCurveChart';
 import ProfileResultsPanel from '../../components/charts/ProfileResultsPanel';
 import BenchmarkProgressBar from '../../components/ui/BenchmarkProgressBar';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { DriveAlertSettings } from './DriveAlertSettings';
+import { DriveSchedules } from './DriveSchedules';
 import { formatBytes } from '../../lib/formatBytes';
 import type { SmartAttribute } from '@sectorama/shared';
 
@@ -30,6 +31,10 @@ export default function DriveDetailPage() {
   const driveId = driveIdStr ? parseInt(driveIdStr, 10) : null;
   const [activeTab, setActiveTab] = useState<Tab>('smart');
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
 
   const { data: drive, isLoading, isError, refetch } = useDrive(driveId);
   const { data: smart } = useSmartData(driveId);
@@ -54,17 +59,25 @@ export default function DriveDetailPage() {
     setSelectedRunId(result.runId);
   }
 
-  async function handleDeleteRun(runId: number) {
-    if (!window.confirm(`Delete run #${runId} and its data from InfluxDB?`)) return;
-    await deleteRun.mutateAsync(runId);
-    if (selectedRunId === runId) setSelectedRunId(null);
+  function handleDeleteRun(runId: number) {
+    setConfirmDialog({
+      message: `Delete run #${runId} and its data from InfluxDB?`,
+      onConfirm: async () => {
+        await deleteRun.mutateAsync(runId);
+        if (selectedRunId === runId) setSelectedRunId(null);
+      },
+    });
   }
 
-  async function handlePurgeAll() {
+  function handlePurgeAll() {
     const count = runs?.length ?? 0;
-    if (!window.confirm(`Permanently delete all ${count} benchmark run${count !== 1 ? 's' : ''} and their InfluxDB data for this drive? This cannot be undone.`)) return;
-    await purgeAll.mutateAsync(undefined);
-    setSelectedRunId(null);
+    setConfirmDialog({
+      message: `Permanently delete all ${count} benchmark run${count !== 1 ? 's' : ''} and their InfluxDB data for this drive? This cannot be undone.`,
+      onConfirm: async () => {
+        await purgeAll.mutateAsync(undefined);
+        setSelectedRunId(null);
+      },
+    });
   }
 
   const activeRun = runs?.find(r => r.status === 'running' || r.status === 'pending');
@@ -72,6 +85,19 @@ export default function DriveDetailPage() {
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Confirm modal */}
+      {confirmDialog && (
+        <ConfirmModal
+          open={true}
+          message={confirmDialog.message}
+          onConfirm={async () => {
+            await confirmDialog.onConfirm();
+            setConfirmDialog(null);
+          }}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
       {/* Breadcrumb */}
       <nav className="text-sm text-gray-500 mb-6 flex items-center gap-2">
         <Link to="/" className="hover:text-gray-300">Dashboard</Link>
@@ -308,161 +334,6 @@ export default function DriveDetailPage() {
       {activeTab === 'schedules' && (
         <DriveSchedules driveId={drive.driveId} />
       )}
-    </div>
-  );
-}
-
-// ── Drive alert threshold sub-component ──────────────────────────────────────
-
-const DEFAULT_TEMP_THRESHOLD = 55;
-
-function DriveAlertSettings({ driveId }: { driveId: number }) {
-  const { data: thresholds } = useAlertThresholds();
-  const updateThreshold      = useUpdateAlertThreshold();
-  const deleteThreshold      = useDeleteAlertThreshold();
-
-  const existing  = thresholds?.find(t => t.driveId === driveId);
-  const serverVal = existing?.temperatureThresholdCelsius ?? DEFAULT_TEMP_THRESHOLD;
-  const [value, setValue] = useState<number>(DEFAULT_TEMP_THRESHOLD);
-  const [open, setOpen]   = useState(false);
-
-  // Sync input when threshold data arrives from server
-  useEffect(() => { setValue(serverVal); }, [serverVal]);
-
-  const valueStr = String(value);
-
-  async function handleSave() {
-    await updateThreshold.mutateAsync({ driveId, temperatureThresholdCelsius: value });
-  }
-
-  async function handleReset() {
-    await deleteThreshold.mutateAsync(driveId);
-    // setValue will re-sync from serverVal (which becomes DEFAULT after delete + invalidate)
-  }
-
-  return (
-    <div className="card mt-6">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center justify-between w-full text-left"
-      >
-        <h3 className="text-sm font-semibold text-white">Alert Settings</h3>
-        <svg
-          className={`w-4 h-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`}
-          viewBox="0 0 20 20" fill="currentColor"
-        >
-          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="mt-4 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-sm text-gray-400 shrink-0">Temperature threshold:</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                max={120}
-                value={valueStr}
-                onChange={e => setValue(parseInt(e.target.value, 10) || DEFAULT_TEMP_THRESHOLD)}
-                className="w-20 bg-surface-200 border border-surface-300 rounded-lg px-3 py-1.5 text-sm
-                           text-gray-200 text-center tabular-nums focus:outline-none focus:border-accent"
-              />
-              <span className="text-sm text-gray-500">°C</span>
-            </div>
-            <span className="text-xs text-gray-600">(global default: {DEFAULT_TEMP_THRESHOLD}°C)</span>
-            <div className="flex gap-2 ml-auto">
-              {existing && (
-                <button
-                  onClick={handleReset}
-                  disabled={deleteThreshold.isPending}
-                  className="text-xs text-gray-500 hover:text-gray-300 border border-surface-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Reset to default
-                </button>
-              )}
-              <button
-                onClick={handleSave}
-                disabled={updateThreshold.isPending}
-                className="btn-primary text-xs disabled:opacity-50"
-              >
-                {updateThreshold.isPending ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-gray-600">
-            An alert fires once when temperature transitions from at-or-below this threshold to above it.
-            Configure notification channels in{' '}
-            <a href="/notifications" className="text-accent hover:text-accent-light transition-colors">Notifications</a>.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Drive-specific schedules sub-component ────────────────────────────────────
-
-function DriveSchedules({ driveId }: { driveId: number }) {
-  const { data: allSchedules } = useSchedules();
-  const createSchedule = useCreateSchedule();
-  const deleteSchedule = useDeleteSchedule();
-  const [cron, setCron] = useState('0 2 * * *');
-
-  const mySchedules = (allSchedules ?? []).filter(s => s.driveId === driveId);
-
-  async function handleAdd() {
-    await createSchedule.mutateAsync({ driveId, cronExpression: cron });
-    setCron('0 2 * * *');
-  }
-
-  return (
-    <div>
-      <div className="card mb-4">
-        <h3 className="text-sm font-semibold text-white mb-3">Add Schedule</h3>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={cron}
-            onChange={e => setCron(e.target.value)}
-            placeholder="cron expression e.g. 0 2 * * *"
-            className="flex-1 bg-surface-100 border border-surface-300 rounded-lg px-3 py-1.5
-                       text-sm text-gray-200 placeholder-gray-600 font-mono
-                       focus:outline-none focus:border-accent"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={createSchedule.isPending || !cron}
-            className="btn-primary disabled:opacity-50"
-          >
-            Add
-          </button>
-        </div>
-        <p className="text-xs text-gray-600 mt-2">Standard 5-field cron format: minute hour day month weekday</p>
-      </div>
-
-      <div className="space-y-2">
-        {mySchedules.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-8">No schedules for this drive.</p>
-        ) : mySchedules.map(s => (
-          <div key={s.id} className="card flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-mono text-gray-200">{s.cronExpression}</p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Last: {s.lastRun ? new Date(s.lastRun).toLocaleString() : 'never'}
-                {s.nextRun && ` · Next: ${new Date(s.nextRun).toLocaleString()}`}
-              </p>
-            </div>
-            <button
-              onClick={() => deleteSchedule.mutate(s.id)}
-              className="text-xs text-danger hover:text-danger/80 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

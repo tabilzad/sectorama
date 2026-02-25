@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
+import { API } from '../endpoints';
 import type { BenchmarkRun, BenchmarkRunDetail, BenchmarkSeries } from '@sectorama/shared';
 import type { BenchmarkProgressState } from './useLiveFeed';
 
@@ -7,7 +8,7 @@ import type { BenchmarkProgressState } from './useLiveFeed';
 export function useDriveBenchmarkSeries(driveId: number | null) {
   return useQuery<BenchmarkSeries[]>({
     queryKey:  ['drive-benchmark-series', driveId],
-    queryFn:   () => api.get<BenchmarkSeries[]>(`/disks/${driveId}/benchmarks/series`).then(r => r.data),
+    queryFn:   () => api.get<BenchmarkSeries[]>(API.disks.benchmarkSeries(driveId!)).then(r => r.data),
     enabled:   driveId !== null,
     staleTime: 30_000,
   });
@@ -16,7 +17,7 @@ export function useDriveBenchmarkSeries(driveId: number | null) {
 export function useDriveBenchmarks(driveId: number | null) {
   return useQuery<BenchmarkRun[]>({
     queryKey:  ['drive-benchmarks', driveId],
-    queryFn:   () => api.get<BenchmarkRun[]>(`/disks/${driveId}/benchmarks`).then(r => r.data),
+    queryFn:   () => api.get<BenchmarkRun[]>(API.disks.benchmarks(driveId!)).then(r => r.data),
     enabled:   driveId !== null,
     staleTime: 30_000,
   });
@@ -26,7 +27,7 @@ export function useBenchmarkRun(driveId: number | null, runId: number | null) {
   return useQuery<BenchmarkRunDetail>({
     queryKey: ['benchmark-run', runId],
     queryFn:  () =>
-      api.get<BenchmarkRunDetail>(`/disks/${driveId}/benchmarks/${runId}`).then(r => r.data),
+      api.get<BenchmarkRunDetail>(API.disks.benchmarkRun(driveId!, runId!)).then(r => r.data),
     enabled:  driveId !== null && runId !== null,
     // No refetchInterval — live progress comes via WS setQueryData, and
     // benchmark_completed WS event invalidates this key for the final fetch.
@@ -53,7 +54,7 @@ export function useRunBenchmark(driveId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (numPoints?: number) =>
-      api.post<{ runId: number; status: string }>(`/disks/${driveId}/benchmark`, { numPoints })
+      api.post<{ runId: number; status: string }>(API.disks.benchmark(driveId!), { numPoints })
         .then(r => r.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['drive-benchmarks', driveId] });
@@ -64,7 +65,7 @@ export function useRunBenchmark(driveId: number | null) {
 export function useDeleteBenchmarkRun(driveId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (runId: number) => api.delete(`/disks/${driveId}/benchmarks/${runId}`),
+    mutationFn: (runId: number) => api.delete(API.disks.benchmarkRun(driveId!, runId)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['drive-benchmarks', driveId] });
       void queryClient.invalidateQueries({ queryKey: ['drive-benchmark-series', driveId] });
@@ -75,7 +76,7 @@ export function useDeleteBenchmarkRun(driveId: number | null) {
 export function usePurgeBenchmarks(driveId: number | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete(`/disks/${driveId}/benchmarks`),
+    mutationFn: () => api.delete(API.disks.benchmarks(driveId!)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['drive-benchmarks', driveId] });
       void queryClient.invalidateQueries({ queryKey: ['drive-benchmark-series', driveId] });

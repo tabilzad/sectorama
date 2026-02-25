@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useDisks } from '../../api/hooks/useDisks';
-import { useSchedules, useCreateSchedule, useUpdateSchedule, useDeleteSchedule } from '../../api/hooks/useSchedules';
+import { useDisks } from '@/api/hooks/useDisks.ts';
+import { useSchedules, useCreateSchedule, useUpdateSchedule, useDeleteSchedule } from '@/api/hooks/useSchedules.ts';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
+import { FormInput } from '../../components/ui/FormInput';
+import { FormSelect } from '../../components/ui/FormSelect';
 
 export default function SchedulesPage() {
   const { data: schedules, isLoading, isError, refetch } = useSchedules();
@@ -11,8 +13,8 @@ export default function SchedulesPage() {
   const updateSchedule = useUpdateSchedule();
   const deleteSchedule = useDeleteSchedule();
 
-  const [newCron, setNewCron]         = useState('0 2 * * *');
-  const [newDriveId, setNewDriveId]   = useState<number | ''>('');
+  const [newCron, setNewCron]           = useState('0 2 * * *');
+  const [newDriveId, setNewDriveId]     = useState<number | ''>('');
   const [newNumPoints, setNewNumPoints] = useState(11);
 
   if (isLoading) return <FullPageSpinner />;
@@ -43,47 +45,41 @@ export default function SchedulesPage() {
       <div className="card mb-8">
         <h2 className="text-base font-semibold text-white mb-4">New Schedule</h2>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Drive (optional)</label>
-            <select
-              value={newDriveId}
-              onChange={e => setNewDriveId(e.target.value ? parseInt(e.target.value, 10) : '')}
-              className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                         text-sm text-gray-200 focus:outline-none focus:border-accent"
-            >
-              <option value="">All drives</option>
-              {(disks ?? []).map(d => (
-                <option key={d.driveId} value={d.driveId}>
-                  {d.vendor} {d.model}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            label="Drive (optional)"
+            value={newDriveId}
+            onChange={e => setNewDriveId(e.target.value ? parseInt(e.target.value, 10) : '')}
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 focus:outline-none focus:border-accent"
+          >
+            <option value="">All drives</option>
+            {(disks ?? []).map(d => (
+              <option key={d.driveId} value={d.driveId}>
+                {d.vendor} {d.model}
+              </option>
+            ))}
+          </FormSelect>
 
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Cron Expression</label>
-            <input
-              type="text"
-              value={newCron}
-              onChange={e => setNewCron(e.target.value)}
-              placeholder="0 2 * * *"
-              className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                         text-sm text-gray-200 font-mono focus:outline-none focus:border-accent"
-            />
-          </div>
+          <FormInput
+            label="Cron Expression"
+            type="text"
+            value={newCron}
+            onChange={e => setNewCron(e.target.value)}
+            placeholder="0 2 * * *"
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 font-mono focus:outline-none focus:border-accent"
+          />
 
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Points</label>
-            <input
-              type="number"
-              value={newNumPoints}
-              min={2}
-              max={100}
-              onChange={e => setNewNumPoints(parseInt(e.target.value, 10))}
-              className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                         text-sm text-gray-200 focus:outline-none focus:border-accent"
-            />
-          </div>
+          <FormInput
+            label="Points"
+            type="number"
+            value={newNumPoints}
+            min={2}
+            max={100}
+            onChange={e => setNewNumPoints(parseInt(e.target.value, 10))}
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 focus:outline-none focus:border-accent"
+          />
 
           <div className="flex items-end">
             <button

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import {
   useChannels,
   useCreateChannel,
@@ -8,37 +8,12 @@ import {
   useSubscriptions,
   useCreateSubscription,
   useDeleteSubscription,
-} from '../../api/hooks/useNotifications';
+} from '@/api/hooks/useNotifications.ts';
 import ChannelForm from '../../components/notifications/ChannelFormModal';
+import { Toast } from '../../components/ui/Toast';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useToast } from '@/hooks/useToast.ts';
 import type { NotificationChannel, AlertType, ChannelType } from '@sectorama/shared';
-
-// ── Page-level toast ──────────────────────────────────────────────────────────
-
-interface ToastMsg { level: 'ok' | 'error'; title: string; body?: string; }
-
-function Toast({ msg, onDismiss }: { msg: ToastMsg; onDismiss: () => void }) {
-  return (
-    <div className={`fixed top-16 right-4 z-50 max-w-xs bg-surface-100 rounded-lg px-4 py-3
-                     text-sm shadow-lg border flex items-start gap-3 animate-fade-in
-                     ${msg.level === 'error' ? 'border-danger/50' : 'border-brand/40'}`}>
-      <div className="flex-1">
-        <p className={`font-medium ${msg.level === 'error' ? 'text-danger' : 'text-brand'}`}>
-          {msg.title}
-        </p>
-        {msg.body && <p className="text-gray-400 mt-0.5 text-xs">{msg.body}</p>}
-      </div>
-      <button
-        onClick={onDismiss}
-        className="text-gray-600 hover:text-gray-300 transition-colors shrink-0 mt-0.5"
-        aria-label="Dismiss"
-      >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-        </svg>
-      </button>
-    </div>
-  );
-}
 
 // ── Alert type constants ──────────────────────────────────────────────────────
 
@@ -50,18 +25,19 @@ const ALERT_TYPES: { type: AlertType; label: string }[] = [
 // ── Per-channel row ───────────────────────────────────────────────────────────
 
 interface ChannelRowProps {
-  channel:   NotificationChannel;
-  onToast:   (msg: ToastMsg) => void;
+  channel: NotificationChannel;
+  onToast: ReturnType<typeof useToast>['showToast'];
 }
 
 function ChannelRow({ channel, onToast }: ChannelRowProps) {
-  const [editing, setEditing] = useState(false);
-  const updateChannel         = useUpdateChannel();
-  const deleteChannel         = useDeleteChannel();
-  const testChannel           = useTestChannel();
-  const { data: subs }        = useSubscriptions(channel.id);
-  const createSub             = useCreateSubscription();
-  const deleteSub             = useDeleteSubscription();
+  const [editing, setEditing]         = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const updateChannel = useUpdateChannel();
+  const deleteChannel = useDeleteChannel();
+  const testChannel   = useTestChannel();
+  const { data: subs } = useSubscriptions(channel.id);
+  const createSub = useCreateSubscription();
+  const deleteSub = useDeleteSubscription();
 
   async function handleTest() {
     try {
@@ -74,11 +50,6 @@ function ChannelRow({ channel, onToast }: ChannelRowProps) {
 
   async function handleToggleEnabled() {
     await updateChannel.mutateAsync({ id: channel.id, enabled: !channel.enabled });
-  }
-
-  async function handleDelete() {
-    if (!window.confirm(`Delete channel "${channel.name}"?`)) return;
-    await deleteChannel.mutateAsync(channel.id);
   }
 
   function isSubscribed(alertType: AlertType) {
@@ -96,6 +67,16 @@ function ChannelRow({ channel, onToast }: ChannelRowProps) {
 
   return (
     <div className="space-y-0">
+      <ConfirmModal
+        open={confirmDelete}
+        message={`Delete channel "${channel.name}"?`}
+        onConfirm={async () => {
+          await deleteChannel.mutateAsync(channel.id);
+          setConfirmDelete(false);
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
       {/* Channel summary row */}
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -145,7 +126,7 @@ function ChannelRow({ channel, onToast }: ChannelRowProps) {
             </button>
 
             <button
-              onClick={handleDelete}
+              onClick={() => setConfirmDelete(true)}
               title="Delete"
               className="text-gray-600 hover:text-danger transition-colors p-1"
             >
@@ -201,20 +182,11 @@ export default function NotificationsPage() {
   const { data: channels, isLoading } = useChannels();
   const createChannel                  = useCreateChannel();
   const [adding, setAdding]            = useState(false);
-
-  // Page-level toast
-  const [toast, setToast]   = useState<ToastMsg | null>(null);
-  const timerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback((msg: ToastMsg) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setToast(msg);
-    timerRef.current = setTimeout(() => setToast(null), 6000);
-  }, []);
+  const { toast, showToast, dismissToast } = useToast();
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
+      {toast && <Toast msg={toast} onDismiss={dismissToast} />}
 
       <div className="flex items-center justify-between mb-6">
         <div>

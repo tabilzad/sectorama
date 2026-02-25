@@ -20,10 +20,10 @@ async function runSchedule(scheduleId: number, driveId: number | null, numPoints
     try {
       const runId = await createRun(did, numPoints, 'scheduled');
       executeBenchmark(runId).catch(err =>
-        console.warn(`[scheduler] Benchmark run ${runId} failed:`, err),
+        console.error(`[scheduler] Benchmark run ${runId} failed:`, err),
       );
     } catch (err) {
-      console.warn(`[scheduler] Could not create run for drive ${did}:`, err);
+      console.error(`[scheduler] Could not create run for drive ${did}:`, err);
     }
   }
 
@@ -35,7 +35,7 @@ async function runSchedule(scheduleId: number, driveId: number | null, numPoints
 /** Register a schedule with node-cron */
 export function registerSchedule(scheduleId: number, cronExpression: string, driveId: number | null, numPoints: number): boolean {
   if (!validate(cronExpression)) {
-    console.warn(`[scheduler] Invalid cron expression for schedule ${scheduleId}: ${cronExpression}`);
+    console.error(`[scheduler] Invalid cron expression for schedule ${scheduleId}: ${cronExpression}`);
     return false;
   }
   const existing = activeTasks.get(scheduleId);
@@ -86,7 +86,7 @@ export function initSmartPoller(): void {
       const { pollAllSmart } = await import('./smartService.js');
       await pollAllSmart();
     } catch (err) {
-      console.warn('[scheduler] SMART poll failed:', err);
+      console.error('[scheduler] SMART poll failed:', err);
     }
   });
 

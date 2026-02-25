@@ -1,22 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
+import { validate } from 'node-cron';
 import { getDb } from '../../db/index.js';
 import { benchmarkSchedules } from '../../db/schema.js';
+import { rowToSchedule } from '../../db/mappers.js';
 import { registerSchedule, unregisterSchedule } from '../../services/scheduler.js';
 import type { BenchmarkSchedule } from '@sectorama/shared';
-
-function rowToSchedule(r: typeof benchmarkSchedules.$inferSelect): BenchmarkSchedule {
-  return {
-    id:             r.id,
-    driveId:        r.driveId ?? null,
-    cronExpression: r.cronExpression,
-    enabled:        r.enabled,
-    numPoints:      r.numPoints,
-    lastRun:        r.lastRun ?? null,
-    nextRun:        r.nextRun ?? null,
-    createdAt:      r.createdAt,
-  };
-}
 
 export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
 
@@ -30,6 +19,11 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/v1/schedules
   app.post<{ Body: { driveId?: number; cronExpression: string; numPoints?: number } }>('/api/v1/schedules', async (req, reply) => {
     const { driveId, cronExpression, numPoints = 11 } = req.body;
+
+    if (!validate(cronExpression)) {
+      return reply.status(400).send({ error: 'Invalid cron expression' } as any);
+    }
+
     const db  = getDb();
     const now = new Date().toISOString();
 
@@ -51,15 +45,20 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/v1/schedules/:id
   app.put<{ Params: { id: string }; Body: { enabled?: boolean; cronExpression?: string; numPoints?: number } }>('/api/v1/schedules/:id', async (req, reply) => {
     const id = parseInt(req.params.id, 10);
+
+    if (req.body.cronExpression !== undefined && !validate(req.body.cronExpression)) {
+      return reply.status(400).send({ error: 'Invalid cron expression' } as any);
+    }
+
     const db = getDb();
 
     const existing = await db.query.benchmarkSchedules.findFirst({ where: eq(benchmarkSchedules.id, id) });
     if (!existing) return reply.status(404).send({ error: 'Schedule not found' } as any);
 
     const updates: Partial<typeof benchmarkSchedules.$inferInsert> = {};
-    if (req.body.enabled     !== undefined) updates.enabled        = req.body.enabled;
+    if (req.body.enabled        !== undefined) updates.enabled        = req.body.enabled;
     if (req.body.cronExpression !== undefined) updates.cronExpression = req.body.cronExpression;
-    if (req.body.numPoints   !== undefined) updates.numPoints      = req.body.numPoints;
+    if (req.body.numPoints      !== undefined) updates.numPoints      = req.body.numPoints;
 
     await db.update(benchmarkSchedules).set(updates).where(eq(benchmarkSchedules.id, id));
 

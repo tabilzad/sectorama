@@ -6,6 +6,7 @@ import {
   notificationSubscriptions,
   driveAlertThresholds,
 } from '../../db/schema.js';
+import { rowToChannel, rowToSub } from '../../db/mappers.js';
 import { createChannel } from '../../services/notifications/channelFactory.js';
 import type {
   NotificationChannel,
@@ -16,19 +17,33 @@ import type {
   Alert,
 } from '@sectorama/shared';
 
-function rowToChannel(r: typeof notificationChannels.$inferSelect): NotificationChannel {
-  return {
-    id:        r.id,
-    name:      r.name,
-    type:      r.type as ChannelType,
-    config:    JSON.parse(r.config) as NotificationChannel['config'],
-    enabled:   r.enabled,
-    createdAt: r.createdAt,
-  };
-}
-
-function rowToSub(r: typeof notificationSubscriptions.$inferSelect): NotificationSubscription {
-  return { id: r.id, channelId: r.channelId, alertType: r.alertType as AlertType };
+function validateChannelConfig(type: ChannelType, cfg: unknown): string | null {
+  if (!cfg || typeof cfg !== 'object') return 'Config must be an object';
+  const obj = cfg as Record<string, unknown>;
+  if (type === 'webhook') {
+    if (typeof obj['url'] !== 'string' || !obj['url']) return 'Webhook config requires a url field';
+    const auth = obj['auth'];
+    if (!auth || typeof auth !== 'object') return 'Webhook config requires an auth object';
+    const authType = (auth as Record<string, unknown>)['type'];
+    if (!['none', 'basic', 'bearer'].includes(String(authType))) {
+      return 'auth.type must be none, basic, or bearer';
+    }
+    if (authType === 'basic') {
+      const { username, password } = auth as Record<string, unknown>;
+      if (typeof username !== 'string' || !username) return 'Basic auth requires a username';
+      if (typeof password !== 'string' || !password) return 'Basic auth requires a password';
+    }
+    if (authType === 'bearer') {
+      if (typeof (auth as Record<string, unknown>)['token'] !== 'string' || !(auth as Record<string, unknown>)['token']) {
+        return 'Bearer auth requires a token';
+      }
+    }
+  } else if (type === 'slack') {
+    if (typeof obj['webhookUrl'] !== 'string' || !obj['webhookUrl']) {
+      return 'Slack config requires a webhookUrl field';
+    }
+  }
+  return null;
 }
 
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
@@ -47,6 +62,12 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     '/api/v1/notifications/channels',
     async (req, reply) => {
       const { name, type, config: cfg } = req.body;
+
+      const configError = validateChannelConfig(type, cfg);
+      if (configError) {
+        return reply.status(400).send({ error: configError });
+      }
+
       const db  = getDb();
       const now = new Date().toISOString();
 
@@ -78,6 +99,13 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       where: eq(notificationChannels.id, id),
     });
     if (!existing) return reply.status(404).send({ error: 'Channel not found' });
+
+    if (req.body.config !== undefined) {
+      const configError = validateChannelConfig(existing.type as ChannelType, req.body.config);
+      if (configError) {
+        return reply.status(400).send({ error: configError });
+      }
+    }
 
     const updates: Partial<typeof notificationChannels.$inferInsert> = {};
     if (req.body.name    !== undefined) updates.name    = req.body.name;

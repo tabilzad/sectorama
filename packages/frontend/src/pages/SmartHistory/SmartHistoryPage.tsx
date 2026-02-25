@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useDisks } from '../../api/hooks/useDisks';
-import { useSmartHistory } from '../../api/hooks/useSmart';
+import { useDisks } from '@/api/hooks/useDisks.ts';
+import { useSmartHistory } from '@/api/hooks/useSmart.ts';
 import SmartAttributeChart from '../../components/charts/SmartAttributeChart';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
+import { FormSelect } from '../../components/ui/FormSelect';
 
 const TIME_RANGES = [
   { label: '24 hours', from: '-24h' },
@@ -47,37 +48,33 @@ export default function SmartHistoryPage() {
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Drive selector */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Drive</label>
-            <select
-              value={selectedDriveId ?? ''}
-              onChange={e => setSelectedDriveId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                         text-sm text-gray-200 focus:outline-none focus:border-accent"
-            >
-              <option value="">Select a drive…</option>
-              {(disks ?? []).map(d => (
-                <option key={d.driveId} value={d.driveId}>
-                  {d.vendor} {d.model} ({d.devicePath})
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            label="Drive"
+            value={selectedDriveId ?? ''}
+            onChange={e => setSelectedDriveId(e.target.value ? parseInt(e.target.value, 10) : null)}
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 focus:outline-none focus:border-accent"
+          >
+            <option value="">Select a drive…</option>
+            {(disks ?? []).map(d => (
+              <option key={d.driveId} value={d.driveId}>
+                {d.vendor} {d.model} ({d.devicePath})
+              </option>
+            ))}
+          </FormSelect>
 
           {/* Attribute selector */}
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Attribute</label>
-            <select
-              value={selectedAttr}
-              onChange={e => setSelectedAttr(e.target.value)}
-              className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                         text-sm text-gray-200 focus:outline-none focus:border-accent"
-            >
-              {COMMON_ATTRS.map(a => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
+          <FormSelect
+            label="Attribute"
+            value={selectedAttr}
+            onChange={e => setSelectedAttr(e.target.value)}
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 focus:outline-none focus:border-accent"
+          >
+            {COMMON_ATTRS.map(a => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </FormSelect>
 
           {/* Time range */}
           <div>

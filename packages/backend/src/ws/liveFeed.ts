@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { WebSocket } from '@fastify/websocket';
+import { WebSocket } from '@fastify/websocket';
 import type { LiveFeedEvent } from '@sectorama/shared';
 
 /** All currently-connected live-feed WebSocket clients */
@@ -28,7 +28,7 @@ export function broadcast(event: LiveFeedEvent): void {
   const payload = JSON.stringify(event);
   for (const client of clients) {
     try {
-      if (client.readyState === 1 /* OPEN */) {
+      if (client.readyState === WebSocket.OPEN) {
         client.send(payload);
       }
     } catch {

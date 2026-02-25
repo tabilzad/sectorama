@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { FormInput } from '../ui/FormInput';
+import { FormSelect } from '../ui/FormSelect';
 import type { NotificationChannel, ChannelType, WebhookChannelConfig, SlackChannelConfig } from '@sectorama/shared';
 
 interface Props {
@@ -81,17 +83,13 @@ export default function ChannelForm({ initial, onSave, onCancel }: Props) {
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
 
           {/* Name */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Name</label>
-            <input
-              required
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. My Slack"
-              className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                         placeholder-gray-600 focus:outline-none focus:border-accent"
-            />
-          </div>
+          <FormInput
+            label="Name"
+            required
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. My Slack"
+          />
 
           {/* Type selector */}
           <div>
@@ -118,70 +116,54 @@ export default function ChannelForm({ initial, onSave, onCancel }: Props) {
           {type === 'webhook' && (
             <>
               <div className="sm:col-span-2">
-                <label className="block text-xs text-gray-500 mb-1">URL</label>
-                <input
+                <FormInput
+                  label="URL"
                   required
                   type="url"
                   value={webhookUrl}
                   onChange={e => setWebhookUrl(e.target.value)}
                   placeholder="https://example.com/webhook"
-                  className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                             placeholder-gray-600 focus:outline-none focus:border-accent font-mono"
+                  extraClassName="font-mono"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Authentication</label>
-                <select
-                  value={authType}
-                  onChange={e => setAuthType(e.target.value as AuthType)}
-                  className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                             focus:outline-none focus:border-accent"
-                >
-                  <option value="none">None</option>
-                  <option value="basic">Basic (username / password)</option>
-                  <option value="bearer">Bearer token</option>
-                </select>
-              </div>
+              <FormSelect
+                label="Authentication"
+                value={authType}
+                onChange={e => setAuthType(e.target.value as AuthType)}
+              >
+                <option value="none">None</option>
+                <option value="basic">Basic (username / password)</option>
+                <option value="bearer">Bearer token</option>
+              </FormSelect>
 
               {authType === 'basic' && (
                 <>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Username</label>
-                    <input
-                      required
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                                 focus:outline-none focus:border-accent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Password</label>
-                    <input
-                      required
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                                 focus:outline-none focus:border-accent"
-                    />
-                  </div>
+                  <FormInput
+                    label="Username"
+                    required
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                  />
+                  <FormInput
+                    label="Password"
+                    required
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                  />
                 </>
               )}
 
               {authType === 'bearer' && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Token</label>
-                  <input
-                    required
-                    value={bearerToken}
-                    onChange={e => setBearerToken(e.target.value)}
-                    placeholder="Bearer token"
-                    className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                               placeholder-gray-600 focus:outline-none focus:border-accent font-mono"
-                  />
-                </div>
+                <FormInput
+                  label="Token"
+                  required
+                  value={bearerToken}
+                  onChange={e => setBearerToken(e.target.value)}
+                  placeholder="Bearer token"
+                  extraClassName="font-mono"
+                />
               )}
             </>
           )}
@@ -189,15 +171,14 @@ export default function ChannelForm({ initial, onSave, onCancel }: Props) {
           {/* ── Slack fields ── */}
           {type === 'slack' && (
             <div className="sm:col-span-2">
-              <label className="block text-xs text-gray-500 mb-1">Slack Webhook URL</label>
-              <input
+              <FormInput
+                label="Slack Webhook URL"
                 required
                 type="url"
                 value={slackUrl}
                 onChange={e => setSlackUrl(e.target.value)}
                 placeholder="https://hooks.slack.com/services/…"
-                className="w-full bg-surface-200 border border-surface-300 rounded-lg px-3 py-2 text-sm text-gray-200
-                           placeholder-gray-600 focus:outline-none focus:border-accent font-mono"
+                extraClassName="font-mono"
               />
             </div>
           )}
