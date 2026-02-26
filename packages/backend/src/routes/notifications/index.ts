@@ -8,9 +8,8 @@ import {
 } from '../../db/schema.js';
 import { rowToChannel, rowToSub } from '../../db/mappers.js';
 import { createChannel } from '../../services/notifications/channelFactory.js';
+import { evaluateAndNotifyNewChannel } from '../../services/notifications/notificationService.js';
 import type {
-  NotificationChannel,
-  NotificationSubscription,
   DriveAlertThreshold,
   ChannelType,
   AlertType,
@@ -80,9 +79,23 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       });
 
       const newId = Number(result.lastInsertRowid);
+
+      // Auto-subscribe to all alert types so the channel is ready out of the box
+      await db.insert(notificationSubscriptions).values([
+        { channelId: newId, alertType: 'smart_error' as AlertType },
+        { channelId: newId, alertType: 'temperature' as AlertType },
+      ]);
+
       const row = await db.query.notificationChannels.findFirst({
         where: eq(notificationChannels.id, newId),
       });
+
+      // Fire an immediate catch-up evaluation so drives already in a bad state
+      // trigger an alert right away — no need to wait for the next SMART poll.
+      evaluateAndNotifyNewChannel(newId).catch(err =>
+        console.error('[notifications] Initial channel evaluation failed:', err),
+      );
+
       return reply.status(201).send(rowToChannel(row!));
     },
   );
@@ -188,6 +201,13 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       const row    = await db.query.notificationSubscriptions.findFirst({
         where: eq(notificationSubscriptions.id, newId),
       });
+
+      // Immediately alert for drives already in this condition so the channel
+      // doesn't have to wait until the next SMART poll to see its first alert.
+      evaluateAndNotifyNewChannel(channelId, [alertType]).catch(err =>
+        console.error('[notifications] Initial subscription evaluation failed:', err),
+      );
+
       return reply.status(201).send(rowToSub(row!));
     },
   );
