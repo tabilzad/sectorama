@@ -17,6 +17,16 @@ on your own hardware.
   <p><em>Dashboard showing 12 drives with live SMART health badges, temperatures, type, and capacity at a glance.</em></p>
 </div>
 
+<div align="center">
+  <img src="imgs/img_1.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+  <p><em>Historical speed curve to track performance overtime </em></p>
+</div>
+
+<div align="center">
+  <img src="imgs/img.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+  <p><em>Latency, sequential and random read statistics</em></p>
+</div>
+
 ---
 
 ## Features
