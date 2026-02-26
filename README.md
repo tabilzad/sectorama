@@ -52,7 +52,7 @@ on your own hardware.
 ### 1. Copy the compose file
 
 ```bash
-curl -O https://raw.githubusercontent.com/tabilzad/sectorama/master/docker-compose.yml
+curl -O https://raw.githubusercontent.com/tabilzad/sectorama/master/docker-compose.prod.yml
 ```
 
 ### 2. Set required secrets
@@ -68,7 +68,7 @@ export BENCHMARK_NUM_POINTS=11
 ### 3. Start
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 Open **http://localhost:8888**, click **Scan for Drives**, then run a benchmark from any drive's detail page.
@@ -88,10 +88,10 @@ cd sectorama
 # 2. Install workspace dependencies
 npm install
 
-# 3. Start InfluxDB sidecar
+# 3. Start just the InfluxDB 
 docker compose -f docker-compose.dev.yml up -d
 
-# 4. Configure environment
+# 4. Configure environment for node
 cp .env.example .env
 # On Windows/macOS: add DISK_DISCOVERY_MOCK=true to .env
 
