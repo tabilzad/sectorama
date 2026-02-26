@@ -28,7 +28,8 @@ interface SmartctlInfoResult {
   model_family?: string;
   serial_number?: string;
   firmware_version?: string;
-  user_capacity?: { bytes: { n: number } };
+  // smartctl 7.1+ wraps large numbers as { n, str }; 7.0 emitted a plain number
+  user_capacity?: { bytes: { n: number } | number };
   rotation_rate?: number;
   interface_speed?: { current?: { string: string } };
   logical_block_size?: number;
@@ -149,11 +150,15 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
 
       // Capacity from smartctl; fall back to sysfs for drives that don't report it.
       // /sys/block/<devname>/size is always in 512-byte units on Linux.
-      let capacity: number = info.user_capacity?.bytes?.n ?? 0;
+      const bytesField = info.user_capacity?.bytes;
+      let capacity: number = (typeof bytesField === 'object' ? bytesField?.n : bytesField) ?? 0;
       if (!capacity) {
         try {
           const devName = dev.name.split('/').pop() ?? '';
-          const sectorCount = parseInt(readFileSync(`/sys/block/${devName}/size`, 'utf8').trim(), 10);
+          // NVMe controllers (e.g. nvme0) are char devices; their namespace block
+          // devices (nvme0n1) are what appears under /sys/block.
+          const sysName = /^nvme\d+$/.test(devName) ? `${devName}n1` : devName;
+          const sectorCount = parseInt(readFileSync(`/sys/block/${sysName}/size`, 'utf8').trim(), 10);
           if (!isNaN(sectorCount) && sectorCount > 0) {
             capacity = sectorCount * 512;
             console.log(`[diskDiscovery] ${dev.name}: smartctl missing capacity, got ${capacity} bytes from sysfs`);
@@ -174,7 +179,9 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
         rpm:               (typeof rotation === 'number' && rotation > 0) ? rotation : null,
         interfaceType:     info.interface_speed?.current?.string ?? dev.type ?? null,
         logicalSectorSize:  info.logical_block_size ?? null,
-        physicalSectorSize: info.physical_block_size ?? null,
+        // NVMe doesn't distinguish logical/physical sectors the way SATA does;
+        // smartctl often omits physical_block_size for NVMe, so fall back to logical.
+        physicalSectorSize: info.physical_block_size ?? info.logical_block_size ?? null,
       });
     } catch (err) {
       const e = err as { code?: number; stderr?: string; message?: string };

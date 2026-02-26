@@ -18,6 +18,17 @@ import type {
 // Each position-curve measurement reads this many bytes from one offset.
 const CURVE_SAMPLE_BYTES = 128 * 1024 * 1024; // 128 MiB
 
+/**
+ * Resolve the block device path suitable for fio.
+ * smartctl --scan returns NVMe controller devices (e.g. /dev/nvme0), which are
+ * character devices. fio must target the namespace block device (/dev/nvme0n1).
+ * SATA/SAS device paths are returned unchanged.
+ */
+function fioDevicePath(devicePath: string): string {
+  // Match /dev/nvme<N> with no suffix — append n1 for namespace 1.
+  return devicePath.replace(/^(\/dev\/nvme\d+)$/, '$1n1');
+}
+
 // ─── Position curve helpers ───────────────────────────────────────────────────
 
 // O_DIRECT requires offsets and sizes to be multiples of the device's physical
@@ -246,13 +257,14 @@ export async function executeBenchmark(runId: number): Promise<void> {
         });
       }
     } else {
+      const blockDevice = fioDevicePath(driveRow.devicePath);
       const offsets = computeOffsets(driveRow.capacity, numPoints);
       console.log(
         `[executeBenchmark] curve offsets: ` +
         `[${offsets.slice(0, 4).join(', ')}${offsets.length > 4 ? ', …' : ''}]`,
       );
       for (let i = 0; i < offsets.length; i++) {
-        const speedBps = await measurePosition(driveRow.devicePath, offsets[i]);
+        const speedBps = await measurePosition(blockDevice, offsets[i]);
         curvePoints.push({ position: offsets[i], speedBps });
         broadcast({
           type:        'benchmark_progress',
@@ -292,7 +304,7 @@ export async function executeBenchmark(runId: number): Promise<void> {
         result = mockProfileResults(driveRow.type)[i];
       } else {
         const fioResult = await runFioJob({
-          devicePath: driveRow.devicePath,
+          devicePath: fioDevicePath(driveRow.devicePath),
           ...cfg.jobParams,
         });
         result = {
