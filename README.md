@@ -12,6 +12,13 @@ on your own hardware.
 
 ---
 
+<div align="center">
+  <img src="imgs/img.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+  <p><em>Dashboard showing 12 drives with live SMART health badges, temperatures, type, and capacity at a glance.</em></p>
+</div>
+
+---
+
 ## Features
 
 - **Drive discovery** — auto-detects all block devices via `smartctl --scan`
