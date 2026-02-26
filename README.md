@@ -23,7 +23,7 @@ on your own hardware.
 </div>
 
 <div align="center">
-  <img src="imgs/img.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+  <img src="imgs/img_2.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
   <p><em>Latency, sequential and random read statistics</em></p>
 </div>
 
