@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Rounded dark background -->
+  <rect width="32" height="32" rx="7" fill="#1a1a24"/>
+
+  <!--
+    Speed-gauge arcs: three concentric partial circles representing disk tracks.
+    Each arc sweeps 240° clockwise from 150° to 30° (gap opens at bottom).
+    Inner track = slowest = dimmest.  Outer track = fastest = brightest.
+    Center of arcs: (16, 20).
+  -->
+
+  <!-- Inner arc  r=4.5  — slow inner track -->
+  <path d="M 12.1 22.3 A 4.5 4.5 0 1 1 19.9 22.3"
+        fill="none" stroke="#1a6968" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- Middle arc  r=8.5 -->
+  <path d="M 8.6 24.3 A 8.5 8.5 0 1 1 23.4 24.3"
+        fill="none" stroke="#2b908f" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Outer arc  r=12.5  — fast outer track -->
+  <path d="M 5.2 26.3 A 12.5 12.5 0 1 1 26.8 26.3"
+        fill="none" stroke="#4ec3c2" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Centre spindle -->
+  <circle cx="16" cy="20" r="2" fill="#4ec3c2"/>
+</svg>

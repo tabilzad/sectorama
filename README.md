@@ -1,10 +1,12 @@
-# Sectorama
-
-**Self-hosted disk benchmark and health monitor.**
-
-Sectorama discovers your drives, runs comprehensive fio benchmarks (position curve + I/O profiles), polls SMART
-attributes on a schedule, and surfaces everything through a clean React dashboard — all from a single Docker container
-on your own hardware.
+<div align="center">
+  <img src="imgs/logo.svg" alt="Sectorama" width="220" />
+  <br/><br/>
+  <strong>Self-hosted disk benchmark and health monitor.</strong>
+  <br/>
+  Sectorama discovers your drives, runs comprehensive fio benchmarks (position curve + I/O profiles), polls SMART
+  attributes on a schedule, and surfaces everything through a clean React dashboard — all from a single Docker container
+  on your own hardware.
+</div>
 
 [![CI](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml/badge.svg)](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/tabilzad/sectorama)](https://hub.docker.com/r/tabilzad/sectorama)
