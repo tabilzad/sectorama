@@ -5,8 +5,12 @@ export class SlackChannel implements INotificationChannel {
   constructor(private readonly cfg: SlackChannelConfig) {}
 
   async send(alert: Alert): Promise<void> {
-    const emoji = alert.type === 'temperature' ? '🌡️' : '⚠️';
-    const label = alert.type === 'temperature' ? 'Temperature Alert' : 'SMART Health Error';
+    const emoji =
+      alert.type === 'temperature'          ? '🌡️' :
+      alert.type === 'temperature_recovery' ? '✅' : '⚠️';
+    const label =
+      alert.type === 'temperature'          ? 'Temperature Alert'     :
+      alert.type === 'temperature_recovery' ? 'Temperature Recovered' : 'SMART Health Error';
 
     const payload = {
       blocks: [

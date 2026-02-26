@@ -4,7 +4,7 @@ import { drives, smartCache, notificationChannels, notificationSubscriptions, dr
 import { config } from '../../config.js';
 import { evaluateAlerts } from './alertEvaluator.js';
 import { createChannel } from './channelFactory.js';
-import type { SmartReading, ChannelType, AlertType } from '@sectorama/shared';
+import type { SmartReading, ChannelType, AlertType, AlertEventType } from '@sectorama/shared';
 
 /**
  * Run a one-time initial alert evaluation for a newly created channel or
@@ -19,7 +19,7 @@ import type { SmartReading, ChannelType, AlertType } from '@sectorama/shared';
  */
 export async function evaluateAndNotifyNewChannel(
   channelId: number,
-  forTypes?: ReadonlyArray<AlertType>,
+  forTypes?: ReadonlyArray<AlertEventType>,
 ): Promise<void> {
   const db = getDb();
 
@@ -72,8 +72,10 @@ export async function evaluateAndNotifyNewChannel(
     );
 
     for (const alert of alerts) {
+      const parentType: AlertType =
+        alert.type === 'temperature_recovery' ? 'temperature' : alert.type;
       if (forTypes && !forTypes.includes(alert.type)) continue;
-      if (!subscribedTypes.has(alert.type)) continue;
+      if (!subscribedTypes.has(parentType)) continue;
       try {
         await channel.send(alert);
       } catch (err) {
@@ -120,6 +122,11 @@ export async function evaluateAndNotify(driveId: number, newReading: SmartReadin
 
   // 5. Dispatch each alert to all subscribed channels
   for (const alert of alerts) {
+    // temperature_recovery shares the 'temperature' subscription — channels that
+    // opted in to temperature alerts also receive the all-clear when it cools down.
+    const subscriptionType: AlertType =
+      alert.type === 'temperature_recovery' ? 'temperature' : alert.type;
+
     const subs = await db
       .select({
         channelId: notificationSubscriptions.channelId,
@@ -130,7 +137,7 @@ export async function evaluateAndNotify(driveId: number, newReading: SmartReadin
       })
       .from(notificationSubscriptions)
       .innerJoin(notificationChannels, eq(notificationSubscriptions.channelId, notificationChannels.id))
-      .where(eq(notificationSubscriptions.alertType, alert.type));
+      .where(eq(notificationSubscriptions.alertType, subscriptionType));
 
     for (const sub of subs) {
       if (!sub.enabled) continue;

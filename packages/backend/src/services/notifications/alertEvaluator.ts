@@ -54,5 +54,25 @@ export function evaluateAlerts(
     });
   }
 
+  // temperature_recovery: fire when temperature drops back to or below threshold
+  if (
+    newReading.temperature !== null &&
+    newReading.temperature <= temperatureThreshold &&
+    oldCache !== undefined &&
+    oldCache.temperature !== null &&
+    oldCache.temperature > temperatureThreshold
+  ) {
+    alerts.push({
+      type:        'temperature_recovery',
+      driveId:     driveInfo.driveId,
+      driveSerial: driveInfo.serial,
+      driveModel:  driveInfo.model,
+      message:     `Drive temperature ${newReading.temperature}°C is back at or below threshold of ${temperatureThreshold}°C.`,
+      value:       newReading.temperature,
+      threshold:   temperatureThreshold,
+      timestamp:   now,
+    });
+  }
+
   return alerts;
 }

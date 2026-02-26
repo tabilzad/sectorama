@@ -168,7 +168,9 @@ export interface SystemStats {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export type AlertType   = 'smart_error' | 'temperature';
+export type AlertType      = 'smart_error' | 'temperature';
+/** Superset of AlertType — includes derived events that share a parent subscription. */
+export type AlertEventType = AlertType | 'temperature_recovery';
 export type ChannelType = 'webhook' | 'slack';
 
 export interface WebhookChannelConfig {
@@ -198,7 +200,7 @@ export interface DriveAlertThreshold {
   temperatureThresholdCelsius: number;
 }
 export interface Alert {
-  type: AlertType;
+  type: AlertEventType;
   driveId: number;
   driveSerial: string;
   driveModel: string;
