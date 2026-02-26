@@ -9,7 +9,6 @@ services:
       - internal
     volumes:
       - app-data:/data          # SQLite DB + other app state
-      - /dev:/dev:ro            # host block devices for smartctl discovery + fio benchmarks
     environment:
       - NODE_ENV=production
       - PORT=8888
