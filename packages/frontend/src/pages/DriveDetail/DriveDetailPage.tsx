@@ -39,12 +39,16 @@ export default function DriveDetailPage() {
   const { data: drive, isLoading, isError, refetch } = useDrive(driveId);
   const { data: smart } = useSmartData(driveId);
   const { data: runs } = useDriveBenchmarks(driveId);
+  // If the user hasn't selected a run yet (e.g. after a page refresh), fall back to
+  // any currently-running run so the progress bar and WS replay work automatically.
+  const activeRun   = runs?.find(r => r.status === 'running' || r.status === 'pending');
+  const activeRunId = selectedRunId ?? activeRun?.runId ?? null;
   const { data: allSeries } = useDriveBenchmarkSeries(driveId);
-  const { data: runDetail } = useBenchmarkRun(driveId, selectedRunId);
+  const { data: runDetail } = useBenchmarkRun(driveId, activeRunId);
   const runBenchmark    = useRunBenchmark(driveId);
   const deleteRun       = useDeleteBenchmarkRun(driveId);
   const purgeAll        = usePurgeBenchmarks(driveId);
-  const benchmarkProgress = useBenchmarkProgress(selectedRunId);
+  const benchmarkProgress = useBenchmarkProgress(activeRunId);
 
   if (isLoading) return <FullPageSpinner />;
   if (isError || !drive) return <ErrorMessage message="Drive not found." retry={refetch} />;
@@ -80,7 +84,6 @@ export default function DriveDetailPage() {
     });
   }
 
-  const activeRun = runs?.find(r => r.status === 'running' || r.status === 'pending');
   const progressRun = runDetail?.status === 'running' || runDetail?.status === 'pending' ? runDetail : null;
 
   return (
