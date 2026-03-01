@@ -404,21 +404,27 @@ export async function getDriveSeries(driveId: number): Promise<BenchmarkSeries[]
     return undefined;
   });
 
-  // Build series, then attach profile results for each run.
+  // Build one series per completed run. Curve points come from byRun (may be
+  // absent for older runs); profile results are always fetched independently so
+  // the history chart works even when curve data is missing for a run.
   const series: BenchmarkSeries[] = [];
-  for (const [runIdStr, timeMap] of byRun) {
-    const meta   = runMeta.get(runIdStr)!;
-    const sorted = Array.from(timeMap.entries())
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const run of completedRuns) {
+    const runIdStr = String(run.runId);
+    const timeMap  = byRun.get(runIdStr);
+
+    const points = timeMap
+      ? Array.from(timeMap.entries())
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .filter(([, v]) => v.speed !== undefined)
+          .map(([, v])    => ({ spot: v.position ?? 0, speed: v.speed! }))
+      : [];
 
     const profileResults = await fetchRunProfiles(runIdStr, rangeStart);
 
     series.push({
-      runId:     parseInt(runIdStr, 10),
-      startedAt: meta.startedAt,
-      points:    sorted
-        .filter(([, v]) => v.speed !== undefined)
-        .map(([, v])    => ({ spot: v.position ?? 0, speed: v.speed! })),
+      runId:     run.runId,
+      startedAt: run.startedAt,
+      points,
       profileResults,
     });
   }

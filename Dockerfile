@@ -51,6 +51,9 @@ RUN apk add --no-cache smartmontools fio
 
 # Copy production node_modules and compiled output from build-backend
 COPY --from=build-backend /app/node_modules ./node_modules
+# Copy any per-package node_modules npm didn't hoist to the root
+# (e.g. drizzle-orm when drizzle-kit causes a version split)
+COPY --from=build-backend /app/packages/backend/node_modules ./packages/backend/node_modules
 COPY --from=build-backend /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build-backend /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=build-backend /app/packages/backend/dist ./packages/backend/dist

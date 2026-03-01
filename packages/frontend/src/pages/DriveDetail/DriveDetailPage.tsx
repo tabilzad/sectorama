@@ -6,6 +6,7 @@ import { useDriveBenchmarks, useDriveBenchmarkSeries, useBenchmarkRun, useRunBen
 import HealthBadge from '../../components/ui/HealthBadge';
 import SpeedCurveChart from '../../components/charts/SpeedCurveChart';
 import ProfileResultsPanel from '../../components/charts/ProfileResultsPanel';
+import ProfileHistoryChart from '../../components/charts/ProfileHistoryChart';
 import BenchmarkProgressBar from '../../components/ui/BenchmarkProgressBar';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
@@ -324,9 +325,22 @@ export default function DriveDetailPage() {
             </div>
           )}
 
+          {/* Profile history — trends across all completed runs */}
+          {allSeries && allSeries.length > 0 && (
+            <div className="card mt-6">
+              <ProfileHistoryChart series={allSeries} />
+            </div>
+          )}
+
           {/* fio profile results for the selected run */}
           {runDetail?.profileResults && runDetail.profileResults.length > 0 && (
             <div className="card mt-4">
+              <h3 className="text-sm font-semibold text-white mb-3">
+                Run #{runDetail.runId} Details
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  {new Date(runDetail.startedAt).toLocaleString()}
+                </span>
+              </h3>
               <ProfileResultsPanel results={runDetail.profileResults} />
             </div>
           )}
