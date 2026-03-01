@@ -1,4 +1,4 @@
-<div align="center">
+<div style="text-align: center;">
   <img src="imgs/logo.svg" alt="Sectorama" width="220" />
   <br/><br/>
   <strong>Self-hosted disk benchmark and health monitor.</strong>
@@ -8,24 +8,20 @@
   on your own hardware.
 </div>
 
-[![CI](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml/badge.svg)](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/tabilzad/sectorama)](https://hub.docker.com/r/tabilzad/sectorama)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-
 ---
 
-<div align="center">
-  <img src="imgs/img.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+<div style="text-align: center;">
+  <img src="imgs/img.png" width="900" />
   <p><em>Dashboard showing 12 drives with live SMART health badges, temperatures, type, and capacity at a glance.</em></p>
 </div>
 
-<div align="center">
-  <img src="imgs/img_1.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+<div style="text-align: center;">
+  <img src="imgs/img_1.png" width="900" />
   <p><em>Historical speed curve to track performance overtime </em></p>
 </div>
 
-<div align="center">
-  <img src="imgs/img_2.png" alt="Sectorama Dashboard — 12 drives monitored with SMART health status and temperatures" width="900" />
+<div style="text-align: center;">
+  <img src="imgs/img_2.png" width="900" />
   <p><em>Latency, sequential and random read statistics</em></p>
 </div>
 
