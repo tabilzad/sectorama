@@ -19,11 +19,9 @@ async function runSchedule(scheduleId: number, driveId: number | null, numPoints
   for (const { driveId: did } of targetDrives) {
     try {
       const runId = await createRun(did, numPoints, 'scheduled');
-      executeBenchmark(runId).catch(err =>
-        console.error(`[scheduler] Benchmark run ${runId} failed:`, err),
-      );
+      await executeBenchmark(runId);
     } catch (err) {
-      console.error(`[scheduler] Could not create run for drive ${did}:`, err);
+      console.error(`[scheduler] Benchmark failed for drive ${did}:`, err);
     }
   }
 
