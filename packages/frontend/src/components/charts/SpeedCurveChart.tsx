@@ -151,17 +151,27 @@ export default function SpeedCurveChart({ series, height = 380 }: SpeedCurveChar
               label={{ value: 'MB/s', angle: -90, position: 'insideLeft', fill: '#666', fontSize: 12 }}
             />
             <Tooltip
-              contentStyle={{ background: '#1a1a24', border: '1px solid #333345', borderRadius: 6 }}
-              labelStyle={{ color: '#999' }}
-              itemStyle={{ display: 'none' }}
-              formatter={(_value, _name, props) => {
-                const speed = Object.entries(props.payload)
-                  .filter(([k, v]) => k !== 'spot' && typeof v === 'number' && v > 0)
-                  .map(([, v]) => formatSpeed(v as number))
-                  .join(', ');
-                return [speed, ''];
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const spot = payload[0]?.payload?.spot as number;
+                return (
+                  <div style={{ background: '#1a1a24', border: '1px solid #333345', borderRadius: 6, padding: '8px 12px', minWidth: 180 }}>
+                    <p className="text-xs text-gray-500 mb-2">Position: {formatXAxis(spot)}</p>
+                    {payload.map(p => {
+                      if (typeof p.value !== 'number') return null;
+                      const runId = parseInt((p.dataKey as string).slice(1));
+                      const run = visibleSeries.find(r => r.runId === runId);
+                      return (
+                        <div key={p.dataKey as string} className="flex items-center gap-2 text-xs mb-0.5">
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: p.color as string, flexShrink: 0 }} />
+                          <span className="text-gray-400">{run ? formatRunDate(run.startedAt) : p.dataKey as string}</span>
+                          <span className="text-gray-100 font-mono ml-auto pl-3">{formatSpeed(p.value)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
               }}
-              labelFormatter={val => `Position: ${formatXAxis(val as number)}`}
             />
             {visibleSeries.map(run => (
               <Line
