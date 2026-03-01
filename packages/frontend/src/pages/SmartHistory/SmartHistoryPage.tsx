@@ -22,6 +22,7 @@ const COMMON_ATTRS = [
   'Reallocated_Sector_Ct',
   'Current_Pending_Sector',
   'Offline_Uncorrectable',
+  'UDMA_CRC_Error_Count',
   'Power_On_Hours',
   'Power_Cycle_Count',
   'Available Spare %',
@@ -29,7 +30,7 @@ const COMMON_ATTRS = [
 ];
 
 function formatAttrLabel(attr: string): string {
-  return attr.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase());
+  return attr.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function resolveZoneConfig(

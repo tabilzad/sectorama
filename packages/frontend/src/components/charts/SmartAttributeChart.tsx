@@ -150,7 +150,7 @@ const GRAD_TEMP   = 'smartGradTemp';
 
 export default function SmartAttributeChart({ points, attrName, height = 300, zoneConfig }: SmartAttributeChartProps) {
   if (!points.length) {
-    return <p className="text-gray-500 text-sm py-8 text-center">No history data yet.</p>;
+    return <p className="text-gray-500 text-sm py-8 text-center">No data — attribute may not be available on this drive type.</p>;
   }
 
   const isTemp  = isTemperatureAttr(attrName);

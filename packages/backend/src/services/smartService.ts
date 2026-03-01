@@ -310,20 +310,30 @@ export async function getSmartHistory(
   const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
-  // temperature is a field on smart_readings, not a smart_attribute row
-  const isTemperature = attrName === 'temperature';
-  const measurement   = (attrName && !isTemperature) ? 'smart_attributes' : 'smart_readings';
-  const fieldFilter   = (attrName && !isTemperature)
-    ? `|> filter(fn: (r) => r.attr_name == "${attrName}")`
-    : '';
+  // These attributes are stored as top-level fields on smart_readings for ALL drive types
+  // (both SATA and NVMe). Everything else lives in smart_attributes (drive-type-specific).
+  const READINGS_FIELD_MAP: Record<string, string> = {
+    temperature:       'temperature',
+    Power_On_Hours:    'power_on_hours',
+    Power_Cycle_Count: 'power_cycle_count',
+  };
+
+  const readingsField = attrName ? (READINGS_FIELD_MAP[attrName] ?? null) : 'temperature';
+  const useReadings   = readingsField !== null;
+
+  const measurement = useReadings ? 'smart_readings' : 'smart_attributes';
+  const attrFilter  = useReadings ? '' : `|> filter(fn: (r) => r.attr_name == "${attrName}")`;
+  const fieldFilter = useReadings
+    ? `|> filter(fn: (r) => r._field == "${readingsField}")`
+    : `|> filter(fn: (r) => r._field == "value" or r._field == "raw_value")`;
 
   const flux = `
     from(bucket: "${config.influx.bucket}")
       |> range(start: ${from}, stop: ${to})
       |> filter(fn: (r) => r._measurement == "${measurement}")
       |> filter(fn: (r) => r.serial == "${serialNumber}")
+      ${attrFilter}
       ${fieldFilter}
-      |> filter(fn: (r) => r._field == "value" or r._field == "raw_value" or r._field == "temperature")
       |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"])
   `;
@@ -331,12 +341,15 @@ export async function getSmartHistory(
   const rows: Array<{ timestamp: string; attrId: number; name: string; value: number; rawValue: number }> = [];
   await queryApi.collectRows(flux, (values, tableMeta) => {
     const obj = tableMeta.toObject(values) as Record<string, unknown>;
+    const val = useReadings
+      ? Number(obj[readingsField!] ?? 0)
+      : Number(obj['value'] ?? 0);
     rows.push({
       timestamp: String(obj['_time'] ?? ''),
       attrId:    Number(obj['attr_id'] ?? 0),
       name:      String(obj['attr_name'] ?? attrName ?? 'temperature'),
-      value:     Number(obj['value'] ?? obj['temperature'] ?? 0),
-      rawValue:  Number(obj['raw_value'] ?? 0),
+      value:     val,
+      rawValue:  useReadings ? val : Number(obj['raw_value'] ?? 0),
     });
     return undefined;
   });
