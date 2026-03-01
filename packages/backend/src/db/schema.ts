@@ -99,6 +99,23 @@ export const driveAlertThresholds = sqliteTable('drive_alert_thresholds', {
   tempTooHotCelsius:           integer('temp_too_hot_celsius'),
 });
 
+// ─── Push Subscriptions ──────────────────────────────────────────────────────
+
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+  id:        integer('id').primaryKey({ autoIncrement: true }),
+  endpoint:  text('endpoint').notNull().unique(),
+  p256dh:    text('p256dh').notNull(),
+  auth:      text('auth').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export const settings = sqliteTable('settings', {
+  key:   text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const drivesRelations = relations(drives, ({ one, many }) => ({
@@ -131,3 +148,5 @@ export type SmartCacheRow                 = typeof smartCache.$inferSelect;
 export type NotificationChannelRow        = typeof notificationChannels.$inferSelect;
 export type NotificationSubscriptionRow   = typeof notificationSubscriptions.$inferSelect;
 export type DriveAlertThresholdRow        = typeof driveAlertThresholds.$inferSelect;
+export type PushSubscriptionRow           = typeof pushSubscriptions.$inferSelect;
+export type SettingsRow                   = typeof settings.$inferSelect;

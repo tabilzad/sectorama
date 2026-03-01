@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { getDb } from '../../db/index.js';
+import { getDb } from '../../db';
 import { drives, smartCache, notificationChannels, notificationSubscriptions, driveAlertThresholds } from '../../db/schema.js';
 import { config } from '../../config.js';
 import { evaluateAlerts } from './alertEvaluator.js';
 import { createChannel } from './channelFactory.js';
+import { sendPushToAll } from '../pushService.js';
 import type { SmartReading, ChannelType, AlertType, AlertEventType } from '@sectorama/shared';
 
 /**
@@ -151,5 +152,14 @@ export async function evaluateAndNotify(driveId: number, newReading: SmartReadin
         );
       }
     }
+
+    // Broadcast to all browser push subscriptions
+    const icon = alert.type === 'temperature_recovery' ? '✅' : '⚠️';
+    sendPushToAll({
+      title: `${icon} ${alert.driveModel}`,
+      body:  alert.message,
+      url:   `/drives/${alert.driveId}`,
+      tag:   `alert-${alert.driveId}`,
+    }).catch(err => console.error('[push] batch send failed:', err));
   }
 }

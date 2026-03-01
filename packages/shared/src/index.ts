@@ -283,3 +283,10 @@ export type LiveFeedEvent =
   | BenchmarkCompletedEvent
   | BenchmarkFailedEvent
   | ConnectedEvent;
+
+// ─── Web Push ─────────────────────────────────────────────────────────────────
+
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}

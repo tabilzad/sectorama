@@ -1,14 +1,54 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useLiveFeed } from '../api/hooks/useLiveFeed';
 import { useToast } from '../hooks/useToast';
 import { Toast } from './ui/Toast';
 
+// ── Inline SVG nav icons ──────────────────────────────────────────────────────
+
+function HouseIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9.75L12 3l9 6.75V21a.75.75 0 01-.75.75H15.75A.75.75 0 0115 21v-5.25a.75.75 0 00-.75-.75h-4.5a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H3.75A.75.75 0 013 21V9.75z" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 01-3.46 0" />
+    </svg>
+  );
+}
+
+// ── Nav link definitions ──────────────────────────────────────────────────────
+
 const NAV_LINKS = [
-  { to: '/',              label: 'Dashboard',    end: true  },
-  { to: '/smart',         label: 'SMART History'            },
-  { to: '/schedules',     label: 'Schedules'                },
-  { to: '/notifications', label: 'Notifications'            },
+  { to: '/',              label: 'Dashboard', end: true,  icon: <HouseIcon />   },
+  { to: '/smart',         label: 'SMART',     end: false, icon: <ActivityIcon /> },
+  { to: '/schedules',     label: 'Schedules', end: false, icon: <CalendarIcon /> },
+  { to: '/notifications', label: 'Alerts',    end: false, icon: <BellIcon />    },
 ];
 
 /** Speed-gauge icon only — used on xs where the full wordmark won't fit. */
@@ -29,7 +69,7 @@ function LogoIcon() {
 /** Full horizontal logo lockup — icon + wordmark + tagline. */
 function LogoFull() {
   return (
-    <svg className="hidden sm:block h-8 w-auto" viewBox="0 0 220 60" fill="none" aria-label="Sectorama">
+    <svg className="hidden sm:block h-8 w-auto" viewBox="0 0 200 50" fill="none" aria-label="Sectorama">
       {/* Speed-gauge icon (same geometry as favicon, scaled 1.5×) */}
       <path d="M 18.2 33.4 A 6.75 6.75 0 1 1 29.8 33.4"
             stroke="#1a6968" strokeWidth="3" strokeLinecap="round"/>
@@ -53,12 +93,7 @@ function LogoFull() {
 export default function Layout() {
   const { connected, lastSmartEvent, lastBenchmarkDone } = useLiveFeed();
   const navigate  = useNavigate();
-  const location  = useLocation();
   const { toast, showToast, dismissToast } = useToast();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Close mobile menu on route change
-  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
     if (!lastBenchmarkDone) return;
@@ -111,60 +146,39 @@ export default function Layout() {
               ))}
             </nav>
 
-            {/* Right side: live indicator + mobile hamburger */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className={`w-2 h-2 rounded-full ${connected ? 'bg-brand animate-pulse' : 'bg-gray-600'}`} />
-                <span className="hidden sm:block">{connected ? 'Live' : 'Offline'}</span>
-              </div>
-
-              {/* Hamburger / close — mobile only */}
-              <button
-                className="sm:hidden p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-200 transition-colors"
-                onClick={() => setMobileOpen(o => !o)}
-                aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-                aria-expanded={mobileOpen}
-              >
-                {mobileOpen ? (
-                  /* X icon */
-                  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  /* Hamburger icon */
-                  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </button>
+            {/* Right side: live indicator */}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className={`w-2 h-2 rounded-full ${connected ? 'bg-brand animate-pulse' : 'bg-gray-600'}`} />
+              <span className="hidden sm:block">{connected ? 'Live' : 'Offline'}</span>
             </div>
 
           </div>
         </div>
-
-        {/* Mobile dropdown menu — renders inside the sticky header so it scrolls with it */}
-        {mobileOpen && (
-          <div className="sm:hidden border-t border-surface-300 bg-surface-50">
-            <nav className="max-w-screen-xl mx-auto px-4 py-2 flex flex-col gap-0.5">
-              {NAV_LINKS.map(({ to, label, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    `px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      isActive ? 'bg-surface-200 text-white' : 'text-gray-400 hover:text-white hover:bg-surface-200'
-                    }`
-                  }
-                >
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
-          </div>
-        )}
       </header>
+
+      {/* Bottom nav — mobile only */}
+      {/* Outer nav extends background into the safe area; inner div holds the tap targets above it */}
+      <nav
+        className="sm:hidden fixed bottom-0 inset-x-0 z-50 bg-surface-50 border-t border-surface-300"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="flex items-stretch h-16">
+          {NAV_LINKS.map(({ to, label, icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] transition-colors
+                 ${isActive ? 'text-white' : 'text-gray-500'}`
+              }
+            >
+              {icon}
+              <span>{label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
 
       {/* Toast notification — auto-dismisses */}
       {toast && <Toast msg={toast} onDismiss={dismissToast} />}
@@ -172,6 +186,8 @@ export default function Layout() {
       {/* ── Page content ──────────────────────────────────────────────── */}
       <main className="flex-1">
         <Outlet />
+        {/* Spacer: clears the fixed bottom nav (4rem) + iOS safe area on mobile */}
+        <div className="sm:hidden" style={{ height: 'calc(4rem + env(safe-area-inset-bottom))' }} aria-hidden="true" />
       </main>
 
       {/* ── Footer ────────────────────────────────────────────────────── */}

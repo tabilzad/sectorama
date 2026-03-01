@@ -7,6 +7,7 @@ import fs from 'fs';
 import { config } from './config.js';
 import { initDb } from './db/index.js';
 import { registerRoutes } from './routes/index.js';
+import { initVapid } from './services/pushService.js';
 import { registerLiveFeed } from './ws/liveFeed.js';
 import { initScheduler, initSmartPoller } from './services/scheduler.js';
 import { scanDisks, registerDrives } from './services/diskDiscovery.js';
@@ -44,6 +45,15 @@ async function buildApp() {
     });
   }
 
+  // Prevent proxies/browsers from caching the service worker script
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.url === '/sw.js') {
+      reply.header('Cache-Control', 'no-store');
+      reply.header('Service-Worker-Allowed', '/');
+    }
+    return payload;
+  });
+
   // ── Routes ────────────────────────────────────────────────────────────────
   await registerRoutes(app);
   registerLiveFeed(app);
@@ -78,6 +88,9 @@ async function main() {
   console.log(`[sectorama] Initializing SQLite at ${config.sqlite.path}...`);
   initDb();
   console.log('[sectorama] SQLite ready');
+
+  // ── Initialize VAPID keys for Web Push ────────────────────────────────────
+  initVapid();
 
   // ── Build Fastify app ──────────────────────────────────────────────────────
   const app = await buildApp();

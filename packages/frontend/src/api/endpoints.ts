@@ -23,5 +23,10 @@ export const API = {
     thresholds:    '/notifications/thresholds',
     threshold:     (driveId: number) => `/notifications/thresholds/${driveId}`,
   },
+  push: {
+    vapidKey:    '/push/vapid-public-key',
+    subscribe:   '/push/subscribe',
+    unsubscribe: '/push/unsubscribe',
+  },
   stats: '/stats',
 } as const;
