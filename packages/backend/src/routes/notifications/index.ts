@@ -230,33 +230,52 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
     const rows = await db.select().from(driveAlertThresholds);
     const result: DriveAlertThreshold[] = rows.map(r => ({
-      driveId: r.driveId,
+      driveId:                     r.driveId,
       temperatureThresholdCelsius: r.temperatureThresholdCelsius,
+      tempNormalCelsius:           r.tempNormalCelsius  ?? null,
+      tempWarmCelsius:             r.tempWarmCelsius    ?? null,
+      tempTooHotCelsius:           r.tempTooHotCelsius  ?? null,
     }));
     return reply.send(result);
   });
 
   // PUT /api/v1/notifications/thresholds/:driveId
-  app.put<{ Params: { driveId: string }; Body: { temperatureThresholdCelsius: number } }>(
+  app.put<{
+    Params: { driveId: string };
+    Body: {
+      temperatureThresholdCelsius: number;
+      tempNormalCelsius?: number | null;
+      tempWarmCelsius?:   number | null;
+      tempTooHotCelsius?: number | null;
+    };
+  }>(
     '/api/v1/notifications/thresholds/:driveId',
     async (req, reply) => {
       const driveId = parseInt(req.params.driveId, 10);
-      const { temperatureThresholdCelsius } = req.body;
+      const {
+        temperatureThresholdCelsius,
+        tempNormalCelsius  = null,
+        tempWarmCelsius    = null,
+        tempTooHotCelsius  = null,
+      } = req.body;
       const db = getDb();
 
       await db.insert(driveAlertThresholds)
-        .values({ driveId, temperatureThresholdCelsius })
+        .values({ driveId, temperatureThresholdCelsius, tempNormalCelsius, tempWarmCelsius, tempTooHotCelsius })
         .onConflictDoUpdate({
           target: driveAlertThresholds.driveId,
-          set: { temperatureThresholdCelsius },
+          set:    { temperatureThresholdCelsius, tempNormalCelsius, tempWarmCelsius, tempTooHotCelsius },
         });
 
       const row = await db.query.driveAlertThresholds.findFirst({
         where: eq(driveAlertThresholds.driveId, driveId),
       });
       const result: DriveAlertThreshold = {
-        driveId: row!.driveId,
+        driveId:                     row!.driveId,
         temperatureThresholdCelsius: row!.temperatureThresholdCelsius,
+        tempNormalCelsius:           row!.tempNormalCelsius  ?? null,
+        tempWarmCelsius:             row!.tempWarmCelsius    ?? null,
+        tempTooHotCelsius:           row!.tempTooHotCelsius  ?? null,
       };
       return reply.send(result);
     },

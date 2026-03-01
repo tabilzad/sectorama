@@ -104,8 +104,25 @@ export function useAlertThresholds() {
 export function useUpdateAlertThreshold() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ driveId, temperatureThresholdCelsius }: { driveId: number; temperatureThresholdCelsius: number }) =>
-      api.put<DriveAlertThreshold>(API.notifications.threshold(driveId), { temperatureThresholdCelsius }).then(r => r.data),
+    mutationFn: ({
+      driveId,
+      temperatureThresholdCelsius,
+      tempNormalCelsius  = null,
+      tempWarmCelsius    = null,
+      tempTooHotCelsius  = null,
+    }: {
+      driveId: number;
+      temperatureThresholdCelsius: number;
+      tempNormalCelsius?:  number | null;
+      tempWarmCelsius?:    number | null;
+      tempTooHotCelsius?:  number | null;
+    }) =>
+      api.put<DriveAlertThreshold>(API.notifications.threshold(driveId), {
+        temperatureThresholdCelsius,
+        tempNormalCelsius,
+        tempWarmCelsius,
+        tempTooHotCelsius,
+      }).then(r => r.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['alert-thresholds'] });
       void queryClient.invalidateQueries({ queryKey: ['disks'] });

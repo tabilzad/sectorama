@@ -89,7 +89,14 @@ export const notificationSubscriptions = sqliteTable('notification_subscriptions
 export const driveAlertThresholds = sqliteTable('drive_alert_thresholds', {
   driveId:                     integer('drive_id').primaryKey()
                                  .references(() => drives.driveId, { onDelete: 'cascade' }),
+  /** Warm→Hot boundary and the alert trigger point. */
   temperatureThresholdCelsius: integer('temperature_threshold_celsius').notNull(),
+  /** Cold→Normal boundary (null = default 25°C) */
+  tempNormalCelsius:           integer('temp_normal_celsius'),
+  /** Normal→Warm boundary (null = default 45°C) */
+  tempWarmCelsius:             integer('temp_warm_celsius'),
+  /** Hot→Too Hot boundary (null = default 65°C) */
+  tempTooHotCelsius:           integer('temp_too_hot_celsius'),
 });
 
 // ─── Relations ───────────────────────────────────────────────────────────────

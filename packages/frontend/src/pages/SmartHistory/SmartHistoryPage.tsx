@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useDisks } from '@/api/hooks/useDisks.ts';
 import { useSmartHistory } from '@/api/hooks/useSmart.ts';
-import SmartAttributeChart from '../../components/charts/SmartAttributeChart';
+import { useAlertThresholds } from '../../api/hooks/useNotifications';
+import SmartAttributeChart, { type TempZoneConfig } from '../../components/charts/SmartAttributeChart';
+import { ZONE_DEFAULTS } from '../DriveDetail/DriveAlertSettings';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import { FormSelect } from '../../components/ui/FormSelect';
 
@@ -23,8 +25,17 @@ const COMMON_ATTRS = [
   'Media Errors',
 ];
 
+/** Convert internal attribute keys to human-readable labels.
+ *  "temperature" → "Temperature", "Power_On_Hours" → "Power On Hours", etc. */
+function formatAttrLabel(attr: string): string {
+  return attr
+    .replace(/_/g, ' ')
+    .replace(/^\w/, c => c.toUpperCase());
+}
+
 export default function SmartHistoryPage() {
-  const { data: disks, isLoading } = useDisks();
+  const { data: disks, isLoading }  = useDisks();
+  const { data: thresholds }        = useAlertThresholds();
   const [selectedDriveId, setSelectedDriveId] = useState<number | null>(null);
   const [selectedAttr, setSelectedAttr]       = useState('temperature');
   const [timeRange, setTimeRange]             = useState('-7d');
@@ -35,6 +46,17 @@ export default function SmartHistoryPage() {
     timeRange,
     'now()',
   );
+
+  // Resolve per-drive zone config for the chart (falls back to defaults when no custom setting saved)
+  const driveThreshold = thresholds?.find(t => t.driveId === selectedDriveId);
+  const zoneConfig: TempZoneConfig | undefined = driveThreshold
+    ? {
+        normal: driveThreshold.tempNormalCelsius  ?? ZONE_DEFAULTS.normal,
+        warm:   driveThreshold.tempWarmCelsius    ?? ZONE_DEFAULTS.warm,
+        hot:    driveThreshold.temperatureThresholdCelsius,
+        tooHot: driveThreshold.tempTooHotCelsius  ?? ZONE_DEFAULTS.tooHot,
+      }
+    : undefined;
 
   if (isLoading) return <FullPageSpinner />;
 
@@ -72,7 +94,7 @@ export default function SmartHistoryPage() {
                        text-sm text-gray-200 focus:outline-none focus:border-accent"
           >
             {COMMON_ATTRS.map(a => (
-              <option key={a} value={a}>{a}</option>
+              <option key={a} value={a}>{formatAttrLabel(a)}</option>
             ))}
           </FormSelect>
 
@@ -108,6 +130,7 @@ export default function SmartHistoryPage() {
           <SmartAttributeChart
             points={historyPoints}
             attrName={selectedAttr}
+            zoneConfig={zoneConfig}
           />
         )}
       </div>

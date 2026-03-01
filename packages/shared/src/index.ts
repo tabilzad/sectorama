@@ -197,7 +197,14 @@ export interface NotificationSubscription {
 }
 export interface DriveAlertThreshold {
   driveId: number;
+  /** Warm→Hot boundary. Also the temperature at which an alert fires. */
   temperatureThresholdCelsius: number;
+  /** Cold→Normal boundary (null = use default 25°C) */
+  tempNormalCelsius: number | null;
+  /** Normal→Warm boundary (null = use default 45°C) */
+  tempWarmCelsius: number | null;
+  /** Hot→Too Hot boundary (null = use default 65°C) */
+  tempTooHotCelsius: number | null;
 }
 export interface Alert {
   type: AlertEventType;

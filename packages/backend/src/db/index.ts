@@ -100,9 +100,23 @@ export function initDb(): void {
 
     CREATE TABLE IF NOT EXISTS drive_alert_thresholds (
       drive_id                        INTEGER PRIMARY KEY REFERENCES drives(drive_id) ON DELETE CASCADE,
-      temperature_threshold_celsius   INTEGER NOT NULL
+      temperature_threshold_celsius   INTEGER NOT NULL,
+      temp_normal_celsius             INTEGER,
+      temp_warm_celsius               INTEGER,
+      temp_too_hot_celsius            INTEGER
     );
   `);
+
+  // Additive migration: add zone columns to pre-existing databases.
+  // SQLite does not support ALTER TABLE … ADD COLUMN IF NOT EXISTS, so we
+  // attempt each ALTER and swallow the error when the column already exists.
+  for (const col of [
+    'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_normal_celsius INTEGER',
+    'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_warm_celsius INTEGER',
+    'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_too_hot_celsius INTEGER',
+  ]) {
+    try { sqlite.exec(col); } catch { /* column already exists — safe to ignore */ }
+  }
 }
 
 /** Verify DB is readable */
