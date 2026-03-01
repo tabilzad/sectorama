@@ -1,5 +1,8 @@
 # ─── Stage 1: Build frontend ───────────────────────────────────────────────
-FROM node:22-alpine AS build-frontend
+# Run on the build host (always amd64 in CI) — frontend output is platform-independent
+# static files, so no QEMU emulation needed. This avoids the rollup native binary
+# issue where npm fails to install the correct optional dep under emulation.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build-frontend
 WORKDIR /app
 
 # Copy workspace manifests first for better layer caching
