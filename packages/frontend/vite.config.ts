@@ -2,6 +2,19 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { execSync } from 'child_process';
+
+function getVersion(): string {
+  if (process.env['APP_VERSION']) return process.env['APP_VERSION'];
+  try {
+    return execSync('git rev-parse --short HEAD', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 export default defineConfig({
   plugins: [
@@ -51,6 +64,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(getVersion()),
   },
   build: {
     outDir: 'dist',

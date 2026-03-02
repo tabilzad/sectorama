@@ -3,6 +3,10 @@
 # static files, so no QEMU emulation needed. This avoids the rollup native binary
 # issue where npm fails to install the correct optional dep under emulation.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build-frontend
+# APP_VERSION is the git tag (e.g. v1.2.3) injected by CI at build time.
+# Falls back to 'dev' if not provided (local docker build without the arg).
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 WORKDIR /app
 
 # Copy workspace manifests first for better layer caching
