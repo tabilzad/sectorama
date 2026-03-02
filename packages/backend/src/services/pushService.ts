@@ -23,11 +23,14 @@ export function initVapid(): void {
     console.log('[push] Generated new VAPID keys. Public key:', publicKey);
   }
 
-  webPush.setVapidDetails(
-    process.env['VAPID_SUBJECT'] ?? 'mailto:admin@localhost',
-    publicKey,
-    privateKey,
-  );
+  // VAPID_SUBJECT must be a mailto: or https: URI without 'localhost'.
+  // Apple's push service (web.push.apple.com) rejects subjects containing
+  // localhost with 403 BadJwtToken. Use your actual domain in production.
+  const subject = process.env['VAPID_SUBJECT'] ?? 'mailto:push@sectorama.local';
+  if (subject.includes('localhost')) {
+    console.warn('[push] VAPID_SUBJECT contains "localhost" — Apple push delivery will fail with 403 BadJwtToken. Set VAPID_SUBJECT=mailto:you@yourdomain.com in your environment.');
+  }
+  webPush.setVapidDetails(subject, publicKey, privateKey);
   _publicKey = publicKey;
 }
 

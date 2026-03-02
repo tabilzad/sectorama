@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useLiveFeed } from '../api/hooks/useLiveFeed';
 import { useToast } from '../hooks/useToast';
+import { showNativeNotification } from '../hooks/usePushNotifications';
 import { Toast } from './ui/Toast';
 
 // ── Inline SVG nav icons ──────────────────────────────────────────────────────
@@ -101,6 +102,10 @@ export default function Layout() {
       { title: 'Benchmark Complete', body: `Run #${lastBenchmarkDone.runId} finished`, level: 'info' },
       4000,
     );
+    showNativeNotification('Benchmark Complete', {
+      body: `Run #${lastBenchmarkDone.runId} finished`,
+      tag: `benchmark-${lastBenchmarkDone.runId}`,
+    });
   }, [lastBenchmarkDone]);
 
   useEffect(() => {
@@ -109,6 +114,10 @@ export default function Layout() {
       { title: 'Drive Health Alert', body: `Drive ${lastSmartEvent.driveId} health FAILED`, level: 'error' },
       8000,
     );
+    showNativeNotification('Drive Health Alert', {
+      body: `Drive ${lastSmartEvent.driveId} health FAILED`,
+      tag: `drive-health-${lastSmartEvent.driveId}`,
+    });
   }, [lastSmartEvent]);
 
   return (
