@@ -17,8 +17,8 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/v1/schedules
-  app.post<{ Body: { driveId?: number; cronExpression: string; numPoints?: number } }>('/api/v1/schedules', async (req, reply) => {
-    const { driveId, cronExpression, numPoints = 11 } = req.body;
+  app.post<{ Body: { driveId?: number; cronExpression: string; numPoints?: number; label?: string } }>('/api/v1/schedules', async (req, reply) => {
+    const { driveId, cronExpression, numPoints = 11, label } = req.body;
 
     if (!validate(cronExpression)) {
       return reply.status(400).send({ error: 'Invalid cron expression' } as any);
@@ -33,6 +33,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
       enabled:        true,
       numPoints,
       createdAt:      now,
+      label:          label ?? null,
     });
 
     const newId = Number(result.lastInsertRowid);
@@ -43,7 +44,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/v1/schedules/:id
-  app.put<{ Params: { id: string }; Body: { enabled?: boolean; cronExpression?: string; numPoints?: number } }>('/api/v1/schedules/:id', async (req, reply) => {
+  app.put<{ Params: { id: string }; Body: { enabled?: boolean; cronExpression?: string; numPoints?: number; label?: string } }>('/api/v1/schedules/:id', async (req, reply) => {
     const id = parseInt(req.params.id, 10);
 
     if (req.body.cronExpression !== undefined && !validate(req.body.cronExpression)) {
@@ -59,6 +60,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
     if (req.body.enabled        !== undefined) updates.enabled        = req.body.enabled;
     if (req.body.cronExpression !== undefined) updates.cronExpression = req.body.cronExpression;
     if (req.body.numPoints      !== undefined) updates.numPoints      = req.body.numPoints;
+    if (req.body.label          !== undefined) updates.label          = req.body.label;
 
     await db.update(benchmarkSchedules).set(updates).where(eq(benchmarkSchedules.id, id));
 

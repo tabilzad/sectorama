@@ -13,7 +13,7 @@ export function useSchedules() {
 export function useCreateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { driveId?: number; cronExpression: string; numPoints?: number }) =>
+    mutationFn: (data: { driveId?: number; cronExpression: string; numPoints?: number; label?: string }) =>
       api.post<BenchmarkSchedule>(API.schedules.list, data).then(r => r.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });
@@ -24,7 +24,7 @@ export function useCreateSchedule() {
 export function useUpdateSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; enabled?: boolean; cronExpression?: string; numPoints?: number }) =>
+    mutationFn: ({ id, ...data }: { id: number; enabled?: boolean; cronExpression?: string; numPoints?: number; label?: string }) =>
       api.put<BenchmarkSchedule>(API.schedules.detail(id), data).then(r => r.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['schedules'] });

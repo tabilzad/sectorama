@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { benchmarkSchedules, drives } from '../db/schema.js';
 import { createRun, executeBenchmark } from './benchmarkEngine.js';
+import { notifyBenchmarkComplete } from './notifications/notificationService.js';
 import { config } from '../config.js';
 
 // Map: scheduleId → ScheduledTask
@@ -16,10 +17,17 @@ async function runSchedule(scheduleId: number, driveId: number | null, numPoints
     ? [{ driveId }]
     : await db.select({ driveId: drives.driveId }).from(drives).where(eq(drives.isConnected, true));
 
+  const [sched] = await db.select({ label: benchmarkSchedules.label })
+    .from(benchmarkSchedules)
+    .where(eq(benchmarkSchedules.id, scheduleId));
+  const scheduleLabel = sched?.label ?? null;
+
   for (const { driveId: did } of targetDrives) {
     try {
       const runId = await createRun(did, numPoints, 'scheduled');
       await executeBenchmark(runId);
+      notifyBenchmarkComplete(runId, did, scheduleLabel)
+        .catch(err => console.error('[scheduler] Benchmark notify failed:', err));
     } catch (err) {
       console.error(`[scheduler] Benchmark failed for drive ${did}:`, err);
     }

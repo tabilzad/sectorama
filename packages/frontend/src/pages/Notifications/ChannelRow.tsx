@@ -15,8 +15,9 @@ import {useToast} from "@/hooks/useToast.ts";
 // ── Alert type constants ──────────────────────────────────────────────────────
 
 const ALERT_TYPES: { type: AlertType; label: string }[] = [
-    { type: 'smart_error', label: 'SMART Errors' },
-    { type: 'temperature', label: 'Temperature'  },
+    { type: 'smart_error',        label: 'SMART Errors'      },
+    { type: 'temperature',        label: 'Temperature'        },
+    { type: 'benchmark_complete', label: 'Benchmark reports'  },
 ];
 
 // ── Per-channel row ───────────────────────────────────────────────────────────

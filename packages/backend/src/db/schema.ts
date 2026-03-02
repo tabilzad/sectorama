@@ -51,6 +51,7 @@ export const benchmarkSchedules = sqliteTable('benchmark_schedules', {
   lastRun:        text('last_run'),
   nextRun:        text('next_run'),
   createdAt:      text('created_at').notNull(),
+  label:          text('label'),
 });
 
 // ─── SmartCache ──────────────────────────────────────────────────────────────

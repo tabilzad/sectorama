@@ -1,4 +1,4 @@
-import type { Alert, SlackChannelConfig } from '@sectorama/shared';
+import type { Alert, BenchmarkCompletePayload, SlackChannelConfig } from '@sectorama/shared';
 import type { INotificationChannel } from '../types.js';
 
 export class SlackChannel implements INotificationChannel {
@@ -40,6 +40,54 @@ export class SlackChannel implements INotificationChannel {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Slack webhook POST failed: ${res.status} ${res.statusText}`);
+    }
+  }
+
+  async sendBenchmarkReport(payload: BenchmarkCompletePayload): Promise<void> {
+    const succeeded = payload.run.status === 'completed';
+    const emoji = succeeded ? '✅' : '❌';
+    const title = succeeded ? 'Benchmark Complete' : 'Benchmark Failed';
+
+    const durationStr = `${payload.run.durationSeconds}s`;
+
+    const slackPayload = {
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: `${emoji} ${title}`, emoji: true },
+        },
+        {
+          type: 'section',
+          fields: [
+            { type: 'mrkdwn', text: `*Drive:*\n${payload.drive.vendor} ${payload.drive.model}` },
+            { type: 'mrkdwn', text: `*Run #:*\n${payload.run.id}` },
+            { type: 'mrkdwn', text: `*Duration:*\n${durationStr}` },
+            { type: 'mrkdwn', text: `*Points:*\n${payload.run.numPoints}` },
+          ],
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: [
+                payload.scheduleLabel ? `Schedule: ${payload.scheduleLabel}` : null,
+                `Timestamp: ${payload.timestamp}`,
+              ].filter(Boolean).join(' · '),
+            },
+          ],
+        },
+      ],
+    };
+
+    const res = await fetch(this.cfg.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slackPayload),
     });
 
     if (!res.ok) {

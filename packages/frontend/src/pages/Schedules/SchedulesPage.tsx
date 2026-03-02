@@ -5,6 +5,14 @@ import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
 import { FormInput } from '../../components/ui/FormInput';
 import { FormSelect } from '../../components/ui/FormSelect';
+import { ScheduleFrequencyPicker } from '../../components/schedules/ScheduleFrequencyPicker';
+import {
+  DEFAULT_SCHEDULE,
+  scheduleToCron,
+  cronToStructured,
+  describeSchedule,
+  type StructuredSchedule,
+} from '../../utils/scheduleParser';
 
 export default function SchedulesPage() {
   const { data: schedules, isLoading, isError, refetch } = useSchedules();
@@ -13,7 +21,8 @@ export default function SchedulesPage() {
   const updateSchedule = useUpdateSchedule();
   const deleteSchedule = useDeleteSchedule();
 
-  const [newCron, setNewCron]           = useState('0 2 * * *');
+  const [newSchedule, setNewSchedule] = useState<StructuredSchedule>(DEFAULT_SCHEDULE);
+  const [newLabel, setNewLabel]         = useState('');
   const [newDriveId, setNewDriveId]     = useState<number | ''>('');
   const [newNumPoints, setNewNumPoints] = useState(11);
 
@@ -23,10 +32,12 @@ export default function SchedulesPage() {
   async function handleCreate() {
     await createSchedule.mutateAsync({
       driveId:        newDriveId !== '' ? newDriveId : undefined,
-      cronExpression: newCron,
+      cronExpression: scheduleToCron(newSchedule),
       numPoints:      newNumPoints,
+      label:          newLabel.trim() || undefined,
     });
-    setNewCron('0 2 * * *');
+    setNewSchedule(DEFAULT_SCHEDULE);
+    setNewLabel('');
     setNewDriveId('');
     setNewNumPoints(11);
   }
@@ -37,6 +48,11 @@ export default function SchedulesPage() {
     return d ? `${d.vendor} ${d.model} (${d.devicePath})` : `Drive #${driveId}`;
   }
 
+  function scheduleDescription(cronExpression: string): string {
+    const structured = cronToStructured(cronExpression);
+    return structured ? describeSchedule(structured) : cronExpression;
+  }
+
   return (
     <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-2xl font-bold text-white mb-6">Benchmark Schedules</h1>
@@ -44,7 +60,16 @@ export default function SchedulesPage() {
       {/* Add schedule form */}
       <div className="card mb-8">
         <h2 className="text-base font-semibold text-white mb-4">New Schedule</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <FormInput
+            label="Name (optional)"
+            type="text"
+            value={newLabel}
+            onChange={e => setNewLabel(e.target.value)}
+            placeholder="e.g. Weekend scan"
+            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
+                       text-sm text-gray-200 focus:outline-none focus:border-accent"
+          />
           <FormSelect
             label="Drive (optional)"
             value={newDriveId}
@@ -59,17 +84,14 @@ export default function SchedulesPage() {
               </option>
             ))}
           </FormSelect>
+        </div>
 
-          <FormInput
-            label="Cron Expression"
-            type="text"
-            value={newCron}
-            onChange={e => setNewCron(e.target.value)}
-            placeholder="0 2 * * *"
-            className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
-                       text-sm text-gray-200 font-mono focus:outline-none focus:border-accent"
-          />
+        <div className="mb-3">
+          <p className="text-xs text-gray-500 mb-1.5">Schedule</p>
+          <ScheduleFrequencyPicker value={newSchedule} onChange={setNewSchedule} />
+        </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <FormInput
             label="Points"
             type="number"
@@ -81,19 +103,16 @@ export default function SchedulesPage() {
                        text-sm text-gray-200 focus:outline-none focus:border-accent"
           />
 
-          <div className="flex items-end">
+          <div className="sm:col-span-3 flex items-end">
             <button
               onClick={handleCreate}
-              disabled={createSchedule.isPending || !newCron}
-              className="w-full btn-primary disabled:opacity-50"
+              disabled={createSchedule.isPending}
+              className="w-full sm:w-auto btn-primary disabled:opacity-50"
             >
               {createSchedule.isPending ? 'Adding…' : 'Add Schedule'}
             </button>
           </div>
         </div>
-        <p className="text-xs text-gray-600 mt-2">
-          Cron format: minute hour day-of-month month day-of-week · Example: <span className="font-mono">0 2 * * *</span> = daily at 2 AM
-        </p>
       </div>
 
       {/* Schedules table */}
@@ -104,7 +123,7 @@ export default function SchedulesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-surface-300">
-                {['Drive', 'Cron', 'Points', 'Enabled', 'Last Run', 'Next Run', ''].map(h => (
+                {['Drive', 'Schedule', 'Points', 'Enabled', 'Last Run', 'Next Run', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                 ))}
               </tr>
@@ -112,8 +131,13 @@ export default function SchedulesPage() {
             <tbody>
               {schedules.map(s => (
                 <tr key={s.id} className="border-b border-surface-300/50 hover:bg-surface-200">
-                  <td className="px-4 py-3 text-gray-300">{driveLabel(s.driveId)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-200">{s.cronExpression}</td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {s.label && (
+                      <em className="block text-xs text-gray-500 not-italic font-medium mb-0.5">{s.label}</em>
+                    )}
+                    {driveLabel(s.driveId)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-200 text-xs">{scheduleDescription(s.cronExpression)}</td>
                   <td className="px-4 py-3 tabular-nums text-gray-400">{s.numPoints}</td>
                   <td className="px-4 py-3">
                     <button

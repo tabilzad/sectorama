@@ -67,7 +67,8 @@ export function initDb(): void {
       num_points      INTEGER NOT NULL DEFAULT 11,
       last_run        TEXT,
       next_run        TEXT,
-      created_at      TEXT    NOT NULL
+      created_at      TEXT    NOT NULL,
+      label           TEXT
     );
 
     CREATE TABLE IF NOT EXISTS smart_cache (
@@ -127,6 +128,7 @@ export function initDb(): void {
     'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_normal_celsius INTEGER',
     'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_warm_celsius INTEGER',
     'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_too_hot_celsius INTEGER',
+    'ALTER TABLE benchmark_schedules ADD COLUMN label TEXT',
   ]) {
     try { sqlite.exec(col); } catch { /* column already exists — safe to ignore */ }
   }

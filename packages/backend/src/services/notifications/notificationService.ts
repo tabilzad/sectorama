@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../db';
-import { drives, smartCache, notificationChannels, notificationSubscriptions, driveAlertThresholds } from '../../db/schema.js';
+import { drives, benchmarkRuns, smartCache, notificationChannels, notificationSubscriptions, driveAlertThresholds } from '../../db/schema.js';
 import { config } from '../../config.js';
 import { evaluateAlerts } from './alertEvaluator.js';
 import { createChannel } from './channelFactory.js';
 import { sendPushToAll } from '../pushService.js';
-import type { SmartReading, ChannelType, AlertType, AlertEventType } from '@sectorama/shared';
+import type { SmartReading, ChannelType, AlertType, AlertEventType, BenchmarkCompletePayload } from '@sectorama/shared';
 
 /**
  * Run a one-time initial alert evaluation for a newly created channel or
@@ -161,5 +161,72 @@ export async function evaluateAndNotify(driveId: number, newReading: SmartReadin
       url:   `/drives/${alert.driveId}`,
       tag:   `alert-${alert.driveId}`,
     }).catch(err => console.error('[push] batch send failed:', err));
+  }
+}
+
+/**
+ * Notify all channels subscribed to 'benchmark_complete' after a scheduled
+ * benchmark run finishes (completed or failed).
+ */
+export async function notifyBenchmarkComplete(
+  runId: number,
+  driveId: number,
+  scheduleLabel: string | null,
+): Promise<void> {
+  const db = getDb();
+
+  const runRow = await db.query.benchmarkRuns.findFirst({ where: eq(benchmarkRuns.runId, runId) });
+  if (!runRow) return;
+
+  const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
+  if (!driveRow) return;
+
+  const completedAt = runRow.completedAt ?? new Date().toISOString();
+  const startedMs   = new Date(runRow.startedAt).getTime();
+  const endMs       = new Date(completedAt).getTime();
+  const durationSeconds = Math.round((endMs - startedMs) / 1000);
+
+  const payload: BenchmarkCompletePayload = {
+    event:         'benchmark_complete',
+    timestamp:     new Date().toISOString(),
+    scheduleLabel,
+    run: {
+      id:              runRow.runId,
+      startedAt:       runRow.startedAt,
+      completedAt,
+      durationSeconds,
+      status:          runRow.status as 'completed' | 'failed',
+      errorMessage:    runRow.errorMessage ?? null,
+      numPoints:       runRow.numPoints,
+    },
+    drive: {
+      id:           driveRow.driveId,
+      vendor:       driveRow.vendor,
+      model:        driveRow.model,
+      serialNumber: driveRow.serialNumber,
+      capacityGb:   Math.round(driveRow.capacity / 1_000_000_000),
+      type:         driveRow.type,
+    },
+  };
+
+  const subs = await db
+    .select({
+      channelId: notificationSubscriptions.channelId,
+      type:      notificationChannels.type,
+      config:    notificationChannels.config,
+      enabled:   notificationChannels.enabled,
+    })
+    .from(notificationSubscriptions)
+    .innerJoin(notificationChannels, eq(notificationSubscriptions.channelId, notificationChannels.id))
+    .where(eq(notificationSubscriptions.alertType, 'benchmark_complete' as AlertType));
+
+  for (const sub of subs) {
+    if (!sub.enabled) continue;
+    try {
+      const channel = createChannel(sub.type as ChannelType, JSON.parse(sub.config));
+      await channel.sendBenchmarkReport(payload);
+    } catch (err) {
+      console.error(`[notifications] Failed to send benchmark_complete report via channel ${sub.channelId}:`, err);
+    }
   }
 }

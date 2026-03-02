@@ -152,6 +152,7 @@ export interface BenchmarkSchedule {
   lastRun: string | null;      // ISO 8601
   nextRun: string | null;      // ISO 8601
   createdAt: string;           // ISO 8601
+  label: string | null;
 }
 
 // ─── System stats ────────────────────────────────────────────────────────────
@@ -168,7 +169,7 @@ export interface SystemStats {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export type AlertType      = 'smart_error' | 'temperature';
+export type AlertType      = 'smart_error' | 'temperature' | 'benchmark_complete';
 /** Superset of AlertType — includes derived events that share a parent subscription. */
 export type AlertEventType = AlertType | 'temperature_recovery';
 export type ChannelType = 'webhook' | 'slack';
@@ -215,6 +216,29 @@ export interface Alert {
   value?: number;
   threshold?: number;
   timestamp: string;
+}
+
+export interface BenchmarkCompletePayload {
+  event: 'benchmark_complete';
+  timestamp: string;              // ISO 8601 — when notification was sent
+  scheduleLabel: string | null;
+  run: {
+    id: number;
+    startedAt: string;
+    completedAt: string;
+    durationSeconds: number;
+    status: 'completed' | 'failed';
+    errorMessage: string | null;
+    numPoints: number;
+  };
+  drive: {
+    id: number;
+    vendor: string;
+    model: string;
+    serialNumber: string;
+    capacityGb: number;
+    type: string;
+  };
 }
 
 // ─── WebSocket live-feed ─────────────────────────────────────────────────────

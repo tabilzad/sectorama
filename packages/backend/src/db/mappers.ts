@@ -17,6 +17,7 @@ export function rowToSchedule(r: typeof benchmarkSchedules.$inferSelect): Benchm
     lastRun:        r.lastRun ?? null,
     nextRun:        r.nextRun ?? null,
     createdAt:      r.createdAt,
+    label:          r.label ?? null,
   };
 }
 
