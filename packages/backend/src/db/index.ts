@@ -119,6 +119,12 @@ export function initDb(): void {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS drive_display_prefs (
+      drive_id      INTEGER PRIMARY KEY REFERENCES drives(drive_id) ON DELETE CASCADE,
+      custom_label  TEXT,
+      display_order INTEGER NOT NULL DEFAULT 0
+    );
   `);
 
   // Additive migration: add zone columns to pre-existing databases.

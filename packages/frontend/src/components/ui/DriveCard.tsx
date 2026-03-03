@@ -13,13 +13,14 @@ export default function DriveCard({ drive }: DriveCardProps) {
       to={`/drives/${drive.driveId}`}
       className={`card flex flex-col gap-3 hover:border-accent/40 transition-colors ${!drive.isConnected ? 'opacity-60' : ''}`}
     >
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-white line-clamp-1">{drive.vendor} {drive.model}</p>
-          <p className="text-xs text-gray-500 font-mono mt-0.5">{drive.devicePath}</p>
-        </div>
-        <HealthBadge health={drive.health} size="sm" />
+      {/* Title — always 2 lines so all cards share the same header height */}
+      <div className="min-w-0">
+        <p className="font-semibold text-white line-clamp-1">
+          {drive.customLabel ?? `${drive.vendor} ${drive.model}`}
+        </p>
+        <p className="text-xs text-gray-400 line-clamp-1">
+          {drive.customLabel ? `${drive.vendor} ${drive.model}` : '\u00A0'}
+        </p>
       </div>
 
       {/* Stats row */}
@@ -45,9 +46,10 @@ export default function DriveCard({ drive }: DriveCardProps) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="pt-1 border-t border-surface-300 text-xs text-accent">
-        View Details →
+      {/* Footer: device path left, health badge right */}
+      <div className="pt-3 border-t border-surface-300 flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500 font-mono truncate">{drive.devicePath}</span>
+        <HealthBadge health={drive.health} size="sm" />
       </div>
     </Link>
   );

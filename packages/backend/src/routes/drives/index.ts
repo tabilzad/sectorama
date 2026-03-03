@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
 import { getDb } from '../../db/index.js';
-import { drives, benchmarkRuns, smartCache as smartCacheTable } from '../../db/schema.js';
+import { drives, benchmarkRuns, smartCache as smartCacheTable, driveDisplayPrefs, settings } from '../../db/schema.js';
 import { scanDisks, registerDrives, getDriveSummaries } from '../../services/diskDiscovery.js';
 import { refreshSmartForDrive, getSmartHistory } from '../../services/smartService.js';
 import { createRun, executeBenchmark, getRunDetail, getDriveSeries, deleteRun, purgeAllRuns } from '../../services/benchmarkEngine.js';
@@ -157,5 +157,54 @@ export async function driveRoutes(app: FastifyInstance): Promise<void> {
       const msg = err instanceof Error ? err.message : String(err);
       return reply.status(409).send({ error: msg });
     }
+  });
+
+  // GET /api/v1/disks/display-prefs/layout — get current dashboard preset
+  app.get('/api/v1/disks/display-prefs/layout', async (_req, reply) => {
+    const db = getDb();
+    const row = await db.select().from(settings)
+      .where(eq(settings.key, 'dashboard_layout_preset'));
+    return reply.send({ preset: row[0]?.value ?? 'custom' });
+  });
+
+  // PUT /api/v1/disks/display-prefs/layout — save preset + optional custom order
+  app.put<{ Body: { preset: string; driveIds?: number[] } }>('/api/v1/disks/display-prefs/layout', async (req, reply) => {
+    const { preset, driveIds } = req.body;
+    const db = getDb();
+    await db.insert(settings)
+      .values({ key: 'dashboard_layout_preset', value: preset })
+      .onConflictDoUpdate({ target: settings.key, set: { value: preset } });
+    if (preset === 'custom' && driveIds?.length) {
+      for (let i = 0; i < driveIds.length; i++) {
+        await db.insert(driveDisplayPrefs)
+          .values({ driveId: driveIds[i], displayOrder: i })
+          .onConflictDoUpdate({ target: driveDisplayPrefs.driveId, set: { displayOrder: i } });
+      }
+    }
+    return reply.status(204).send();
+  });
+
+  // PUT /api/v1/disks/display-prefs/order — batch reorder drives
+  // NOTE: must be registered before /:driveId routes to prevent "order" being treated as a driveId
+  app.put<{ Body: { driveIds: number[] } }>('/api/v1/disks/display-prefs/order', async (req, reply) => {
+    const { driveIds } = req.body;
+    const db = getDb();
+    for (let i = 0; i < driveIds.length; i++) {
+      await db.insert(driveDisplayPrefs)
+        .values({ driveId: driveIds[i], displayOrder: i })
+        .onConflictDoUpdate({ target: driveDisplayPrefs.driveId, set: { displayOrder: i } });
+    }
+    return reply.status(204).send();
+  });
+
+  // PATCH /api/v1/disks/:driveId/display-prefs — update custom label for one drive
+  app.patch<{ Params: { driveId: string }; Body: { customLabel: string | null } }>('/api/v1/disks/:driveId/display-prefs', async (req, reply) => {
+    const driveId = parseInt(req.params.driveId, 10);
+    const { customLabel } = req.body;
+    const db = getDb();
+    await db.insert(driveDisplayPrefs)
+      .values({ driveId, customLabel: customLabel ?? null, displayOrder: 0 })
+      .onConflictDoUpdate({ target: driveDisplayPrefs.driveId, set: { customLabel: customLabel ?? null } });
+    return reply.status(204).send();
   });
 }

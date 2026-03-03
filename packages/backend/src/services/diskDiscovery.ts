@@ -2,8 +2,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync } from 'fs';
 import { eq } from 'drizzle-orm';
-import { getDb } from '../db/index.js';
-import { drives } from '../db/schema.js';
+import { getDb } from '../db';
+import { drives, driveDisplayPrefs, settings } from '../db/schema.js';
 import { config } from '../config.js';
 import type { DriveSummary, DriveType } from '@sectorama/shared';
 
@@ -261,8 +261,41 @@ export async function getDriveSummaries(): Promise<DriveSummary[]> {
   const rows = await db.query.drives.findMany({
     with: { smartCache: true },
   });
+
+  // Fetch display prefs and preset in parallel
+  const [allPrefs, presetRow] = await Promise.all([
+    db.select().from(driveDisplayPrefs),
+    db.select().from(settings).where(eq(settings.key, 'dashboard_layout_preset')),
+  ]);
+  const prefsMap = new Map(allPrefs.map(p => [p.driveId, p]));
+  const preset = presetRow[0]?.value ?? 'custom';
+
+  type RowWithCache = typeof rows[number] & { smartCache?: { temperature?: number | null } | null };
+
+  rows.sort((a, b) => {
+    if (preset === 'capacity' || preset === 'capacity_asc') {
+      const dir = preset === 'capacity_asc' ? 1 : -1;
+      return dir * (a.capacity - b.capacity);
+    }
+    if (preset === 'temperature' || preset === 'temperature_asc') {
+      const dir = preset === 'temperature_asc' ? 1 : -1;
+      const tA = (a as RowWithCache).smartCache?.temperature;
+      const tB = (b as RowWithCache).smartCache?.temperature;
+      // nulls always last regardless of direction
+      if (tA == null && tB == null) return 0;
+      if (tA == null) return 1;
+      if (tB == null) return -1;
+      return dir * (tA - tB);
+    }
+    // 'custom': sort by display_order, fallback to driveId
+    const oA = prefsMap.get(a.driveId)?.displayOrder ?? a.driveId;
+    const oB = prefsMap.get(b.driveId)?.displayOrder ?? b.driveId;
+    return oA - oB;
+  });
+
   return rows.map(row => {
     const sc = (row as typeof row & { smartCache?: { healthPassed?: boolean | null; temperature?: number | null; polledAt?: string | null } }).smartCache;
+    const prefs = prefsMap.get(row.driveId);
     return {
       driveId:          row.driveId,
       serialNumber:     row.serialNumber,
@@ -278,6 +311,7 @@ export async function getDriveSummaries(): Promise<DriveSummary[]> {
       temperature:      sc?.temperature ?? null,
       lastSmartPoll:    sc?.polledAt ?? null,
       lastBenchmarkRun: null,
+      customLabel:      prefs?.customLabel ?? null,
     };
   });
 }

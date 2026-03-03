@@ -18,6 +18,7 @@ export function formatSpeed(bytesPerSec: number, decimals = 2): string {
 
 export type DriveType = 'HDD' | 'SSD' | 'NVMe' | 'Unknown';
 export type DriveHealth = 'ok' | 'warning' | 'failed' | 'unknown';
+export type DashboardPreset = 'custom' | 'capacity' | 'capacity_asc' | 'temperature' | 'temperature_asc';
 
 export interface Drive {
   driveId: number;
@@ -50,6 +51,7 @@ export interface DriveSummary {
   temperature: number | null;
   lastSmartPoll: string | null;        // ISO 8601
   lastBenchmarkRun: string | null;     // ISO 8601
+  customLabel: string | null;          // null = use vendor+model
 }
 
 // ─── SMART ───────────────────────────────────────────────────────────────────

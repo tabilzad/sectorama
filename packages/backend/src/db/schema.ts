@@ -110,6 +110,14 @@ export const pushSubscriptions = sqliteTable('push_subscriptions', {
   createdAt: text('created_at').notNull(),
 });
 
+// ─── Drive Display Preferences ───────────────────────────────────────────────
+
+export const driveDisplayPrefs = sqliteTable('drive_display_prefs', {
+  driveId:      integer('drive_id').primaryKey().references(() => drives.driveId, { onDelete: 'cascade' }),
+  customLabel:  text('custom_label'),
+  displayOrder: integer('display_order').notNull().default(0),
+});
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 export const settings = sqliteTable('settings', {
@@ -151,3 +159,4 @@ export type NotificationSubscriptionRow   = typeof notificationSubscriptions.$in
 export type DriveAlertThresholdRow        = typeof driveAlertThresholds.$inferSelect;
 export type PushSubscriptionRow           = typeof pushSubscriptions.$inferSelect;
 export type SettingsRow                   = typeof settings.$inferSelect;
+export type DriveDisplayPrefsRow          = typeof driveDisplayPrefs.$inferSelect;

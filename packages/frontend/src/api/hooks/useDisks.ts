@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { API } from '../endpoints';
-import type { Drive, DriveSummary } from '@sectorama/shared';
+import type { Drive, DriveSummary, DashboardPreset } from '@sectorama/shared';
 
 export function useDisks() {
   return useQuery<DriveSummary[]>({
@@ -26,6 +26,36 @@ export function useScanDisks() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['disks'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+}
+
+export function useUpdateDriveLabel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ driveId, customLabel }: { driveId: number; customLabel: string | null }) =>
+      api.patch(API.disks.displayPrefs(driveId), { customLabel }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['disks'] });
+    },
+  });
+}
+
+export function useDashboardLayout() {
+  return useQuery<{ preset: DashboardPreset }>({
+    queryKey: ['dashboard-layout'],
+    queryFn:  () => api.get<{ preset: DashboardPreset }>(API.disks.displayPrefsLayout).then(r => r.data),
+  });
+}
+
+export function useSaveDashboardLayout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { preset: DashboardPreset; driveIds?: number[] }) =>
+      api.put(API.disks.displayPrefsLayout, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['disks'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard-layout'] });
     },
   });
 }
