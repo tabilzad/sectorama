@@ -28,6 +28,18 @@
   }
 }
 
+@keyframes card-jiggle {
+  0%   { transform: rotate(-0.5deg); }
+  100% { transform: rotate(0.5deg);  }
+}
+
+@layer utilities {
+  .card-jiggle {
+    animation: card-jiggle 0.45s ease-in-out infinite alternate;
+    transform-origin: center;
+  }
+}
+
 @layer components {
   .card {
     @apply bg-surface-100 rounded-xl border border-surface-300 p-5;
