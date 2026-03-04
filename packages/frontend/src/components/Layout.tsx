@@ -135,7 +135,10 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* ── Top nav ───────────────────────────────────────────────────── */}
-      <header className="bg-surface-50 border-b border-surface-300 sticky top-0 z-50">
+      <header
+        className="bg-surface-50 border-b border-surface-300 sticky top-0 z-50"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14">
 
