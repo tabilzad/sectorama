@@ -70,10 +70,35 @@ const LATENCY_METRICS: LatencyMetric[] = [
 ];
 
 const PROFILE_TABS: { id: BenchmarkProfile; label: string }[] = [
-  { id: 'seq_read',     label: 'Seq Read'  },
-  { id: 'rand_read_4k', label: '4K Random' },
-  { id: 'latency',      label: 'Latency'   },
+  { id: 'seq_1m_qd1',  label: 'Seq QD1'  },
+  { id: 'seq_1m_qd32', label: 'Seq QD32' },
+  { id: 'rnd_4k_qd1',  label: '4K QD1'   },
+  { id: 'rnd_4k_qd32', label: '4K QD32'  },
 ];
+
+// ─── Per-profile chart metadata ───────────────────────────────────────────────
+//
+// Data-driven table eliminates every profile-name conditional branch in the component.
+// Adding a new profile requires only one new entry here.
+
+type PrimaryKey = 'bwBps' | 'iops' | 'latMeanNs';
+
+interface ProfileChartMeta {
+  primaryKey:       PrimaryKey;
+  primaryLabel:     string;
+  primaryFormat:    (n: number) => string;
+  yAxisLabel:       string;
+  higherIsBetter:   boolean;
+  /** When true, render one line per latency percentile (with toggle controls). */
+  showLatencyLines: boolean;
+}
+
+const PROFILE_CHART_META: Record<BenchmarkProfile, ProfileChartMeta> = {
+  seq_1m_qd1:  { primaryKey: 'bwBps',     primaryLabel: 'Throughput',   primaryFormat: formatBw,      yAxisLabel: 'MB/s',    higherIsBetter: true,  showLatencyLines: false },
+  seq_1m_qd32: { primaryKey: 'bwBps',     primaryLabel: 'Throughput',   primaryFormat: formatBw,      yAxisLabel: 'MB/s',    higherIsBetter: true,  showLatencyLines: false },
+  rnd_4k_qd1:  { primaryKey: 'latMeanNs', primaryLabel: 'Mean Latency', primaryFormat: formatLatency, yAxisLabel: 'Latency', higherIsBetter: false, showLatencyLines: true  },
+  rnd_4k_qd32: { primaryKey: 'iops',      primaryLabel: 'IOPS',         primaryFormat: formatIops,    yAxisLabel: 'IOPS',    higherIsBetter: true,  showLatencyLines: false },
+};
 
 // ─── Chart point ──────────────────────────────────────────────────────────────
 
@@ -98,7 +123,7 @@ interface ProfileHistoryChartProps {
 }
 
 export default function ProfileHistoryChart({ series, height = 260 }: ProfileHistoryChartProps) {
-  const [activeProfile, setActiveProfile] = useState<BenchmarkProfile>('seq_read');
+  const [activeProfile, setActiveProfile] = useState<BenchmarkProfile>('seq_1m_qd1');
   const [hiddenMetrics, setHiddenMetrics] = useState<Set<string>>(
     () => new Set(LATENCY_METRICS.filter(m => !m.visibleByDefault).map(m => m.key)),
   );
@@ -144,23 +169,23 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
     })
     .filter((d): d is ChartPoint => d !== null);
 
-  const isLatency = activeProfile === 'latency';
-  const isSeqRead = activeProfile === 'seq_read';
-  const higherIsBetter = !isLatency;
-
-  type PrimaryKey = 'bwBps' | 'iops' | 'latMeanNs';
-  const primaryKey: PrimaryKey = isSeqRead ? 'bwBps' : isLatency ? 'latMeanNs' : 'iops';
-  const primaryLabel   = isSeqRead ? 'Throughput' : isLatency ? 'Mean Latency' : 'IOPS';
-  const primaryFormat  = isSeqRead ? formatBw     : isLatency ? formatLatency   : formatIops;
-  const yAxisUnitLabel = isSeqRead ? 'MB/s'       : isLatency ? 'Latency'       : 'IOPS';
+  const {
+    primaryKey,
+    primaryLabel,
+    primaryFormat,
+    yAxisLabel:    yAxisUnitLabel,
+    higherIsBetter,
+    showLatencyLines,
+  } = PROFILE_CHART_META[activeProfile];
 
   function yAxisFormat(val: number): string {
-    if (isSeqRead) return `${(val / 1e6).toFixed(0)}`;
-    if (!isLatency) {
+    if (primaryKey === 'bwBps') return `${(val / 1e6).toFixed(0)}`;
+    if (primaryKey === 'iops') {
       if (val >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
       if (val >= 1e3) return `${(val / 1e3).toFixed(0)}K`;
       return String(Math.round(val));
     }
+    // latMeanNs
     if (val < 1_000)     return `${Math.round(val)} ns`;
     if (val < 1_000_000) return `${(val / 1_000).toFixed(0)} µs`;
     return `${(val / 1_000_000).toFixed(1)} ms`;
@@ -216,7 +241,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
       )}
 
       {/* ── Latency metric toggles ── */}
-      {hasChart && isLatency && (
+      {hasChart && showLatencyLines && (
         <div className="flex flex-wrap gap-1.5 mb-3">
           {LATENCY_METRICS.map(m => {
             const hidden = hiddenMetrics.has(m.key);
@@ -286,7 +311,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
                 return [String(value), String(name)];
               }}
             />
-            {isLatency ? (
+            {showLatencyLines ? (
               visibleLatencyMetrics.map(m => (
                 <Line
                   key={m.key}
@@ -326,7 +351,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
               <tr className="border-b border-surface-300">
                 <th className="pb-2 pr-4 text-left text-gray-500 font-medium">Run</th>
                 <th className="pb-2 pr-4 text-right text-gray-500 font-medium">{primaryLabel}</th>
-                {isLatency && (
+                {showLatencyLines && (
                   <>
                     <th className="pb-2 pr-4 text-right text-gray-500 font-medium">P99</th>
                     <th className="pb-2 pr-4 text-right text-gray-500 font-medium">P99.9</th>
@@ -362,7 +387,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
                     <td className="py-2 pr-4 text-right text-gray-200 font-mono tabular-nums">
                       {primaryFormat(primaryVal)}
                     </td>
-                    {isLatency && (
+                    {showLatencyLines && (
                       <>
                         <td className="py-2 pr-4 text-right text-gray-400 font-mono tabular-nums">
                           {formatLatency(pt.latP99Ns)}

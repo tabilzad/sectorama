@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 
-export type FioRwMode = 'read' | 'randread';
+export type FioRwMode    = 'read' | 'randread';
+export type FioIoEngine  = 'psync' | 'libaio' | 'io_uring';
 
 export interface FioJobParams {
   /** Block device or file path (e.g. /dev/sda). */
@@ -21,6 +22,31 @@ export interface FioJobParams {
   offsetBytes?:   number;
   /** Bytes to read. Required when runtimeSecs is 0. */
   sizeBytes?:     number;
+  /**
+   * Async I/O engine. Defaults to 'libaio'.
+   * IMPORTANT: 'psync' is synchronous and ignores iodepth — fio will cap
+   * the queue depth to 1 regardless of the iodepth setting.
+   * Use 'libaio' (Linux ≥2.5) or 'io_uring' (Linux ≥5.1) for true async.
+   */
+  ioEngine?:      FioIoEngine;
+  /**
+   * Disable fio's block-tracking map. Required for steady-state timed random
+   * I/O. Without this, fio shifts toward sequential access as it exhausts
+   * the finite set of blocks, distorting IOPS and latency measurements.
+   */
+  noRandomMap?:   boolean;
+  /**
+   * Spawn numjobs workers as threads instead of processes.
+   * Avoids fork overhead when numjobs > 1.
+   */
+  thread?:        boolean;
+  /**
+   * Fix the random-number seed so every run with the same parameters accesses
+   * the same block sequence (--randrepeat=1). Enables reproducible comparisons
+   * across machines and across time.  Set to false to vary the sequence per run.
+   * Defaults to false (fio default: randrepeat=1 actually, but we pass explicitly).
+   */
+  randRepeat?:    boolean;
 }
 
 export interface FioResult {
@@ -68,6 +94,8 @@ interface FioJsonOutput {
 
 /** Build the fio CLI argument list from job parameters. */
 export function buildFioArgs(params: FioJobParams): string[] {
+  const engine = params.ioEngine ?? 'libaio';
+
   const args = [
     '--name=sectorama',
     `--filename=${params.devicePath}`,
@@ -75,13 +103,11 @@ export function buildFioArgs(params: FioJobParams): string[] {
     `--bs=${params.blockSizeBytes}`,
     `--iodepth=${params.iodepth}`,
     `--numjobs=${params.numjobs}`,
-    '--direct=1',
-    // psync uses standard pread() — works on every kernel/device/container config.
-    // libaio requires aligned async I/O support which fails on some kernels (EINVAL).
-    '--ioengine=psync',
+    '--direct=1',           // O_DIRECT: bypass page cache, measure real device speed
+    `--ioengine=${engine}`, // libaio (default): true async; psync silently caps QD to 1
     '--readonly',
     '--output-format=json',
-    '--group_reporting',   // merge numjobs into one result row
+    '--group_reporting',    // merge numjobs into one result row
   ];
 
   if (params.runtimeSecs > 0) {
@@ -95,6 +121,17 @@ export function buildFioArgs(params: FioJobParams): string[] {
   }
   if (params.sizeBytes !== undefined) {
     args.push(`--size=${params.sizeBytes}`);
+  }
+  if (params.noRandomMap) {
+    args.push('--norandommap');
+  }
+  if (params.thread) {
+    args.push('--thread');
+  }
+  // Emit randrepeat only when the caller has explicitly opted in or out; do not
+  // rely on fio's build-time default which can vary between distributions.
+  if (params.randRepeat !== undefined) {
+    args.push(`--randrepeat=${params.randRepeat ? 1 : 0}`);
   }
 
   return args;

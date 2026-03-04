@@ -33,29 +33,37 @@ interface ProfileDisplay {
 }
 
 const PROFILE_DISPLAY: Record<BenchmarkProfile, ProfileDisplay> = {
-  seq_read: {
-    label:          'Sequential Read',
+  seq_1m_qd1: {
+    label:          'Seq 1M QD1',
     primaryLabel:   'Throughput',
     primary:        r => formatBw(r.bwBps),
     secondaryLabel: 'P99 Latency',
     secondary:      r => formatLatency(r.latP99Ns),
-    detail:         '1 MiB blocks · 1 job · 30 s',
+    detail:         '1 MiB blocks · QD 1 · 30 s',
   },
-  rand_read_4k: {
-    label:          '4K Random Read',
-    primaryLabel:   'IOPS',
-    primary:        r => formatIops(r.iops),
+  seq_1m_qd32: {
+    label:          'Seq 1M QD32',
+    primaryLabel:   'Throughput',
+    primary:        r => formatBw(r.bwBps),
     secondaryLabel: 'P99 Latency',
     secondary:      r => formatLatency(r.latP99Ns),
-    detail:         '4 KiB blocks · 8 jobs · 30 s',
+    detail:         '1 MiB blocks · QD 32 · 30 s',
   },
-  latency: {
-    label:          'Idle Latency',
+  rnd_4k_qd1: {
+    label:          '4K Rnd QD1',
     primaryLabel:   'Mean Latency',
     primary:        r => formatLatency(r.latMeanNs),
     secondaryLabel: 'P99.9 Latency',
     secondary:      r => formatLatency(r.latP999Ns),
     detail:         '4 KiB blocks · QD 1 · 30 s',
+  },
+  rnd_4k_qd32: {
+    label:          '4K Rnd QD32',
+    primaryLabel:   'IOPS',
+    primary:        r => formatIops(r.iops),
+    secondaryLabel: 'P99 Latency',
+    secondary:      r => formatLatency(r.latP99Ns),
+    detail:         '4 KiB blocks · QD 32 · 30 s',
   },
 };
 
@@ -114,7 +122,7 @@ export default function ProfileResultsPanel({ results }: ProfileResultsPanelProp
           read-only · direct I/O
         </span>
       </h4>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {results.map(r => (
           <ProfileCard key={r.profile} result={r} />
         ))}

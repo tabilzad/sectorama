@@ -6,7 +6,13 @@ import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { runFioJob } from './fioRunner.js';
-import { BENCHMARK_PROFILES, mockProfileResults } from './benchmarkProfiles.js';
+import {
+  BENCHMARK_PROFILES,
+  getCurveParams,
+  PROFILE_ORDER,
+  mockProfileResults,
+} from './benchmarkProfiles.js';
+import { computeDiskRegion } from './diskRegion.js';
 import type {
   BenchmarkRunDetail,
   BenchmarkPoint,
@@ -15,8 +21,8 @@ import type {
   BenchmarkProfile,
 } from '@sectorama/shared';
 
-// Each position-curve measurement reads this many bytes from one offset.
-const CURVE_SAMPLE_BYTES = 128 * 1024 * 1024; // 128 MiB
+// Position-curve sample size and iodepth are now drive-type-aware.
+// See getCurveParams() in benchmarkProfiles.ts.
 
 /**
  * Resolve the block device path suitable for fio.
@@ -35,14 +41,18 @@ function fioDevicePath(devicePath: string): string {
 // block size. 4096 bytes satisfies both 512-byte and 4 KiB sector devices.
 const SECTOR_ALIGN = 4096;
 
-/** Generate N evenly-spaced byte offsets across the disk, aligned to SECTOR_ALIGN. */
-function computeOffsets(capacity: number, numPoints: number): number[] {
+/**
+ * Generate N evenly-spaced byte offsets across the disk, aligned to SECTOR_ALIGN.
+ * sampleBytes is subtracted from capacity so the last sample doesn't overrun
+ * the end of the device (O_DIRECT requires the read window to stay on-disk).
+ */
+function computeOffsets(capacity: number, numPoints: number, sampleBytes: number): number[] {
   const offsets: number[] = [];
   for (let i = 0; i < numPoints; i++) {
     const fraction   = numPoints === 1 ? 0 : i / (numPoints - 1);
-    const maxOffset  = Math.max(0, capacity - CURVE_SAMPLE_BYTES);
+    const maxOffset  = Math.max(0, capacity - sampleBytes);
     const rawOffset  = fraction * maxOffset;
-    // Floor to nearest sector boundary so O_DIRECT pread() never gets EINVAL.
+    // Floor to nearest sector boundary so O_DIRECT never gets EINVAL.
     const aligned    = Math.floor(rawOffset / SECTOR_ALIGN) * SECTOR_ALIGN;
     offsets.push(aligned);
   }
@@ -50,20 +60,29 @@ function computeOffsets(capacity: number, numPoints: number): number[] {
 }
 
 /**
- * Read 128 MiB sequentially from a specific byte offset using fio.
+ * Read sampleBytes sequentially from a specific byte offset using fio.
  * Returns bytes/second for that disk position.
+ *
+ * iodepth must be ≥ 32 for NVMe: at QD=1, PCIe round-trip latency caps
+ * single-stream sequential throughput well below the drive's rated speed.
+ * For HDD/SSD, iodepth=1 is correct (single-stream is the meaningful metric).
  */
-async function measurePosition(devicePath: string, offsetBytes: number): Promise<number> {
+async function measurePosition(
+  devicePath:  string,
+  offsetBytes: number,
+  iodepth:     number,
+  sampleBytes: number,
+): Promise<number> {
   const result = await runFioJob({
     devicePath,
     rwMode:         'read',
-    blockSizeBytes: 1024 * 1024,  // 1 MiB blocks
-    iodepth:        1,
+    blockSizeBytes: 1_048_576,  // 1 MiB blocks
+    iodepth,
     numjobs:        1,
-    runtimeSecs:    0,            // run until sizeBytes are consumed
+    runtimeSecs:    0,          // one-shot: read exactly sampleBytes then stop
     rampTimeSecs:   0,
     offsetBytes,
-    sizeBytes:      CURVE_SAMPLE_BYTES,
+    sizeBytes:      sampleBytes,
   });
   return result.bwBps;
 }
@@ -72,7 +91,8 @@ async function measurePosition(devicePath: string, offsetBytes: number): Promise
 
 /** Generate a synthetic speed curve for Windows dev / CI. */
 function mockSpeedCurve(capacity: number, numPoints: number, driveType: string): BenchmarkPoint[] {
-  const offsets = computeOffsets(capacity, numPoints);
+  const { sampleBytes } = getCurveParams(driveType);
+  const offsets = computeOffsets(capacity, numPoints, sampleBytes);
   return offsets.map((position, i) => {
     const fraction = i / Math.max(numPoints - 1, 1);
     let baseMBps: number;
@@ -179,7 +199,7 @@ async function fetchRunProfiles(
   });
 
   // Return only fully-populated results, in catalogue order.
-  const ORDER: BenchmarkProfile[] = BENCHMARK_PROFILES.map(p => p.profile);
+  const ORDER: BenchmarkProfile[] = PROFILE_ORDER;
   return Array.from(byProfile.values())
     .filter((pr): pr is ProfileResult =>
       pr.profile !== undefined &&
@@ -211,9 +231,11 @@ export async function createRun(
 /**
  * Execute a full benchmark run:
  *   Phase 1 — position curve: N evenly-spaced sequential reads across the disk.
- *   Phase 2 — fio profiles: seq_read, rand_read_4k, latency.
+ *   Phase 2 — fio profiles: seq_1m_qd1, seq_1m_qd32, rnd_4k_qd1, rnd_4k_qd32.
  *
- * Progress is streamed via WebSocket. Both phases write to InfluxDB on completion.
+ * All profile jobs target a fixed middle-of-disk region (see diskRegion.ts) to
+ * eliminate outer-track bias on HDDs and ensure cross-device comparability.
+ * Progress is streamed via WebSocket; both phases write to InfluxDB on completion.
  */
 export async function executeBenchmark(runId: number): Promise<void> {
   const db       = getDb();
@@ -238,6 +260,20 @@ export async function executeBenchmark(runId: number): Promise<void> {
 
   const startTs = new Date(runRow.startedAt).getTime();
 
+  // All runs use the same uniform profile catalogue.
+  const profiles = BENCHMARK_PROFILES;
+
+  // Position-curve iodepth/sample-size are still drive-type-aware (see getCurveParams).
+  const { iodepth: curveQd, sampleBytes: curveSampleBytes } = getCurveParams(driveRow.type);
+
+  // Compute the middle-of-disk region that all profile jobs must stay within.
+  // This pins the working set so results are comparable across drive capacities.
+  const region = computeDiskRegion(driveRow.capacity);
+  console.log(
+    `[executeBenchmark] region: offset=${(region.offsetBytes / 1_073_741_824).toFixed(2)} GiB ` +
+    `size=${(region.sizeBytes   / 1_073_741_824).toFixed(2)} GiB`,
+  );
+
   try {
     // ── Phase 1: position curve ──────────────────────────────────────────────
     const curvePoints: BenchmarkPoint[] = [];
@@ -258,13 +294,14 @@ export async function executeBenchmark(runId: number): Promise<void> {
       }
     } else {
       const blockDevice = fioDevicePath(driveRow.devicePath);
-      const offsets = computeOffsets(driveRow.capacity, numPoints);
+      const offsets = computeOffsets(driveRow.capacity, numPoints, curveSampleBytes);
       console.log(
-        `[executeBenchmark] curve offsets: ` +
-        `[${offsets.slice(0, 4).join(', ')}${offsets.length > 4 ? ', …' : ''}]`,
+        `[executeBenchmark] curve: type=${driveRow.type} iodepth=${curveQd} ` +
+        `sampleMiB=${(curveSampleBytes / 1_048_576).toFixed(0)} ` +
+        `offsets=[${offsets.slice(0, 4).join(', ')}${offsets.length > 4 ? ', …' : ''}]`,
       );
       for (let i = 0; i < offsets.length; i++) {
-        const speedBps = await measurePosition(blockDevice, offsets[i]);
+        const speedBps = await measurePosition(blockDevice, offsets[i], curveQd, curveSampleBytes);
         curvePoints.push({ position: offsets[i], speedBps });
         broadcast({
           type:        'benchmark_progress',
@@ -282,20 +319,20 @@ export async function executeBenchmark(runId: number): Promise<void> {
     // ── Phase 2: fio profiles ────────────────────────────────────────────────
     const profileResults: ProfileResult[] = [];
 
-    for (let i = 0; i < BENCHMARK_PROFILES.length; i++) {
-      const cfg = BENCHMARK_PROFILES[i];
+    for (let i = 0; i < profiles.length; i++) {
+      const cfg = profiles[i];
 
       broadcast({
         type:        'benchmark_progress',
         runId,
         pointIndex:  i,
-        totalPoints: BENCHMARK_PROFILES.length,
+        totalPoints: profiles.length,
         speedBps:    0,
         phase:       'profiles',
         phaseLabel:  cfg.label,
       });
 
-      console.log(`[executeBenchmark] profile ${i + 1}/${BENCHMARK_PROFILES.length}: ${cfg.profile}`);
+      console.log(`[executeBenchmark] profile ${i + 1}/${profiles.length}: ${cfg.profile}`);
 
       let result: ProfileResult;
 
@@ -304,8 +341,12 @@ export async function executeBenchmark(runId: number): Promise<void> {
         result = mockProfileResults(driveRow.type)[i];
       } else {
         const fioResult = await runFioJob({
-          devicePath: fioDevicePath(driveRow.devicePath),
+          devicePath:  fioDevicePath(driveRow.devicePath),
           ...cfg.jobParams,
+          // Pin the working set to the middle-of-disk region so random and
+          // sequential tests are not influenced by drive capacity or outer-track bias.
+          offsetBytes: region.offsetBytes,
+          sizeBytes:   region.sizeBytes,
         });
         result = {
           profile:   cfg.profile,

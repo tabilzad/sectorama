@@ -108,8 +108,17 @@ export interface BenchmarkPoint {
 
 // ─── fio profile results ─────────────────────────────────────────────────────
 
-/** Identifier for each fio benchmark profile. */
-export type BenchmarkProfile = 'seq_read' | 'rand_read_4k' | 'latency';
+/**
+ * Identifier for each fio benchmark profile.
+ * Four profiles run uniformly across all drive types so results are directly
+ * comparable in the public database regardless of drive class.
+ *
+ *   seq_1m_qd1  — single-stream sequential throughput (typical desktop / NAS use)
+ *   seq_1m_qd32 — deep-queue sequential throughput (saturates NVMe PCIe bandwidth)
+ *   rnd_4k_qd1  — QD 1 random read (latency-sensitive baseline; "desktop IOPS")
+ *   rnd_4k_qd32 — QD 32 random read (peak IOPS; matches CrystalDiskMark Q32T1)
+ */
+export type BenchmarkProfile = 'seq_1m_qd1' | 'seq_1m_qd32' | 'rnd_4k_qd1' | 'rnd_4k_qd32';
 
 /** Aggregated metrics produced by a single fio profile run. */
 export interface ProfileResult {
