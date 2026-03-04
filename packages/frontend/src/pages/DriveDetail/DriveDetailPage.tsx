@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDrive } from '../../api/hooks/useDisks';
-import { useSmartData } from '../../api/hooks/useSmart';
+import { useDrive } from '@/api/hooks/useDisks.ts';
+import { useSmartData } from '@/api/hooks/useSmart.ts';
 import { useDriveBenchmarks, useDriveBenchmarkSeries, useBenchmarkRun, useRunBenchmark, useBenchmarkProgress, useDeleteBenchmarkRun, usePurgeBenchmarks } from '../../api/hooks/useBenchmarks';
 import HealthBadge from '../../components/ui/HealthBadge';
 import SpeedCurveChart from '../../components/charts/SpeedCurveChart';
@@ -12,8 +12,7 @@ import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { DriveAlertSettings } from './DriveAlertSettings';
-import { DriveSchedules } from './DriveSchedules';
-import { formatBytes } from '../../lib/formatBytes';
+import { formatBytes } from '@/lib/formatBytes.ts';
 import type { SmartAttribute } from '@sectorama/shared';
 
 function formatPowerOnTime(hours: number | null | undefined): string {
@@ -25,7 +24,7 @@ function formatPowerOnTime(hours: number | null | undefined): string {
   return `${years.toFixed(1)} yr`;
 }
 
-type Tab = 'smart' | 'benchmarks' | 'schedules';
+type Tab = 'smart' | 'benchmarks';
 
 export default function DriveDetailPage() {
   const { driveId: driveIdStr } = useParams<{ driveId: string }>();
@@ -141,7 +140,7 @@ export default function DriveDetailPage() {
 
       {/* Tab switcher */}
       <div className="flex gap-1 mb-6 border-b border-surface-300">
-        {(['smart', 'benchmarks', 'schedules'] as Tab[]).map(tab => (
+        {(['smart', 'benchmarks'] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -151,7 +150,7 @@ export default function DriveDetailPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            {tab === 'smart' ? 'SMART' : tab === 'benchmarks' ? 'Benchmarks' : 'Schedules'}
+            {tab === 'smart' ? 'SMART' : 'Benchmarks'}
           </button>
         ))}
       </div>
@@ -347,10 +346,6 @@ export default function DriveDetailPage() {
         </div>
       )}
 
-      {/* ── Schedules tab ──────────────────────────────────────────────── */}
-      {activeTab === 'schedules' && (
-        <DriveSchedules driveId={drive.driveId} />
-      )}
     </div>
   );
 }
