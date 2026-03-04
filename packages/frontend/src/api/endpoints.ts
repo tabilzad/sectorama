@@ -31,5 +31,8 @@ export const API = {
     subscribe:   '/push/subscribe',
     unsubscribe: '/push/unsubscribe',
   },
+  settings: {
+    communitySharing: '/settings/community-sharing',
+  },
   stats: '/stats',
 } as const;

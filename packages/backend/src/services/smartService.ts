@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { eq } from 'drizzle-orm';
 import { Point } from '@influxdata/influxdb-client';
-import { getDb } from '../db/index.js';
+import { getDb, getSqlite } from '../db';
 import { drives, smartCache } from '../db/schema.js';
 import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
@@ -10,7 +10,7 @@ import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
 import { deriveHealth } from '../utils/health.js';
 import type { SmartReading, SmartAttribute } from '@sectorama/shared';
-import type { DriveRow } from '../db/schema.js';
+import type { DriveRow, SmartCacheRow } from '../db/schema.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -298,6 +298,56 @@ export async function pollAllSmart(): Promise<void> {
       console.error(`[smartService] SMART poll failed for ${drive.devicePath}:`, err);
     }
   }
+}
+
+/** Return the cached SMART snapshot for a drive from SQLite (synchronous). */
+export function getSmartCacheRow(driveId: number): SmartCacheRow | null {
+  const row = getSqlite()
+    .prepare<[number], SmartCacheRow>('SELECT * FROM smart_cache WHERE drive_id = ?')
+    .get(driveId);
+  return row ?? null;
+}
+
+/** Query the latest SMART attribute snapshot for a drive serial from InfluxDB. */
+export async function getLatestSmartAttributes(serial: string): Promise<SmartAttribute[]> {
+  const { getQueryApi } = await import('../db/influx.js');
+  const queryApi = getQueryApi();
+
+  const flux = `
+    from(bucket: "${config.influx.bucket}")
+      |> range(start: -30d)
+      |> filter(fn: (r) => r._measurement == "smart_attributes")
+      |> filter(fn: (r) => r.serial == "${serial}")
+      |> last()
+  `;
+
+  // Collect the latest value per (attr_id, attr_name) × _field combination,
+  // then assemble one SmartAttribute per unique (attr_id, attr_name) pair.
+  const byAttr = new Map<string, SmartAttribute>();
+
+  await queryApi.collectRows(flux, (values, tableMeta) => {
+    const obj    = tableMeta.toObject(values) as Record<string, unknown>;
+    const attrId = Number(obj['attr_id'] ?? 0);
+    const name   = String(obj['attr_name'] ?? '');
+    const field  = String(obj['_field'] ?? '');
+    const val    = Number(obj['_value'] ?? 0);
+
+    const key = `${attrId}:${name}`;
+    if (!byAttr.has(key)) {
+      byAttr.set(key, { attrId, name, value: 0, worst: 0, threshold: 0, rawValue: 0, failing: false });
+    }
+    const entry = byAttr.get(key)!;
+    switch (field) {
+      case 'value':     entry.value     = val;        break;
+      case 'worst':     entry.worst     = val;        break;
+      case 'threshold': entry.threshold = val;        break;
+      case 'raw_value': entry.rawValue  = val;        break;
+      case 'failing':   entry.failing   = val !== 0;  break;
+    }
+    return undefined;
+  });
+
+  return Array.from(byAttr.values());
 }
 
 /** Query SMART history from InfluxDB for a given drive and attribute */

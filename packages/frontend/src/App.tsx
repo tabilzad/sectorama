@@ -5,6 +5,7 @@ import DriveDetailPage    from './pages/DriveDetail/DriveDetailPage';
 import SmartHistoryPage   from './pages/SmartHistory/SmartHistoryPage';
 import SchedulesPage      from './pages/Schedules/SchedulesPage';
 import NotificationsPage  from './pages/Notifications/NotificationsPage';
+import SettingsPage       from './pages/Settings/SettingsPage';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="smart" element={<SmartHistoryPage />} />
         <Route path="schedules" element={<SchedulesPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

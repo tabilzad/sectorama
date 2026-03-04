@@ -13,6 +13,11 @@ import {
   mockProfileResults,
 } from './benchmarkProfiles.js';
 import { computeDiskRegion } from './diskRegion.js';
+import { getCommunitySharingEnabled } from './settingsService.js';
+import { getSmartCacheRow, getLatestSmartAttributes } from './smartService.js';
+import { gatherEnvironmentInfo } from './environmentInfo.js';
+import { buildCommunityReport } from './communityReport.js';
+import { createUploader } from './communityUploader.js';
 import type {
   BenchmarkRunDetail,
   BenchmarkPoint,
@@ -380,6 +385,18 @@ export async function executeBenchmark(runId: number): Promise<void> {
       .where(eq(benchmarkRuns.runId, runId));
 
     broadcast({ type: 'benchmark_completed', runId, driveId: runRow.driveId });
+
+    // Fire-and-forget community report (only when user has opted in)
+    void (async () => {
+      if (!getCommunitySharingEnabled()) return;
+      const [smartCacheRow, smartAttrs, env] = await Promise.all([
+        Promise.resolve(getSmartCacheRow(runRow.driveId)),
+        getLatestSmartAttributes(driveRow.serialNumber),
+        gatherEnvironmentInfo(),
+      ]);
+      const report = buildCommunityReport(driveRow, smartCacheRow, smartAttrs, profileResults, curvePoints, env);
+      await createUploader().upload(report);
+    })().catch(err => console.warn('[community] report upload failed', err));
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

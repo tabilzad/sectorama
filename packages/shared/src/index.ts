@@ -325,3 +325,47 @@ export interface PushSubscriptionPayload {
   endpoint: string;
   keys: { p256dh: string; auth: string };
 }
+
+// ─── Community reporting ──────────────────────────────────────────────────────
+
+export interface EnvironmentInfo {
+  osType:         string;   // os.type()   e.g. 'Linux'
+  osRelease:      string;   // os.release() e.g. '6.1.0-28-amd64'
+  osArch:         string;   // os.arch()   e.g. 'x64'
+  fioVersion:     string;   // 'fio-3.36' or 'unknown'
+  appVersion:     string;   // APP_VERSION env or 'dev'
+  ramTotalBytes:  number;   // os.totalmem()
+  swapTotalBytes: number;   // from /proc/swaps (0 on Windows/macOS)
+  swapActive:     boolean;
+}
+
+export interface CommunityReport {
+  schemaVersion:  1;
+  reportId:       string;       // random UUID — no user linkage
+  reportedAt:     string;       // ISO 8601
+  environment:    EnvironmentInfo;
+  drive: {
+    driveIdHash:         string;          // SHA-256(serial).slice(0,16)
+    vendor:              string;
+    model:               string;
+    firmwareRevision:    string;
+    capacityBytes:       number;
+    driveType:           string;
+    interfaceType:       string | null;
+    rpm:                 number | null;
+    logicalSectorBytes:  number | null;
+    physicalSectorBytes: number | null;
+    smart: {
+      powerOnHours:        number | null;
+      powerCycleCount:     number | null;
+      temperature:         number | null;
+      reallocatedSectors:  number | null;
+      pendingSectors:      number | null;
+      uncorrectableErrors: number | null;
+      healthPassed:        boolean | null;
+      attributes:          SmartAttribute[];
+    } | null;
+  };
+  profileResults: ProfileResult[];
+  positionCurve:  BenchmarkPoint[];
+}
