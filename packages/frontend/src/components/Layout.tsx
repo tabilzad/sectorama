@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useLiveFeed } from '../api/hooks/useLiveFeed';
 import { useToast } from '../hooks/useToast';
 import { showNativeNotification } from '../hooks/usePushNotifications';
@@ -108,6 +109,11 @@ export default function Layout() {
   const navigate  = useNavigate();
   const { toast, showToast, dismissToast } = useToast();
 
+  const [showUpdate, setShowUpdate] = useState(false);
+  const { updateServiceWorker } = useRegisterSW({
+    onNeedRefresh: () => setShowUpdate(true),
+  });
+
   useEffect(() => {
     if (!lastBenchmarkDone) return;
     showToast(
@@ -214,6 +220,33 @@ export default function Layout() {
           ))}
         </div>
       </nav>
+
+      {/* Update banner — persists until user acts */}
+      {showUpdate && (
+        <div
+          className="fixed inset-x-0 z-40 flex items-center justify-between gap-3 px-4 py-2.5 bg-surface-100 border-b border-accent/40 text-sm"
+          style={{ top: 'calc(3.5rem + env(safe-area-inset-top))' }}
+        >
+          <span className="text-gray-300">A new version is available.</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => updateServiceWorker(true)}
+              className="px-3 py-1 rounded bg-accent text-white text-xs font-medium hover:bg-accent-light transition-colors"
+            >
+              Reload
+            </button>
+            <button
+              onClick={() => setShowUpdate(false)}
+              className="text-gray-500 hover:text-gray-300 transition-colors"
+              aria-label="Dismiss"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast notification — auto-dismisses */}
       {toast && <Toast msg={toast} onDismiss={dismissToast} />}

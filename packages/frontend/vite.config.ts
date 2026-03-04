@@ -23,7 +23,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       manifest: {
         name: 'Sectorama — Disk Monitor',
         short_name: 'Sectorama',

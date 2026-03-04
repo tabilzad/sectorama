@@ -1,10 +1,12 @@
 /// <reference lib="WebWorker" />
 import { precacheAndRoute } from 'workbox-precaching';
+import { clientsClaim } from 'workbox-core';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string }>;
 };
 
+clientsClaim();
 precacheAndRoute(self.__WB_MANIFEST);
 
 self.addEventListener('push', (event) => {
