@@ -51,8 +51,8 @@ const PROFILE_DISPLAY: Record<BenchmarkProfile, ProfileDisplay> = {
   },
   rnd_4k_qd1: {
     label:          '4K Rnd QD1',
-    primaryLabel:   'Mean Latency',
-    primary:        r => formatLatency(r.latMeanNs),
+    primaryLabel:   'P99 Latency',
+    primary:        r => formatLatency(r.latP99Ns),
     secondaryLabel: 'P99.9 Latency',
     secondary:      r => formatLatency(r.latP999Ns),
     detail:         '4 KiB blocks · QD 1 · 30 s',

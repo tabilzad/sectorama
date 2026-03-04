@@ -81,7 +81,7 @@ const PROFILE_TABS: { id: BenchmarkProfile; label: string }[] = [
 // Data-driven table eliminates every profile-name conditional branch in the component.
 // Adding a new profile requires only one new entry here.
 
-type PrimaryKey = 'bwBps' | 'iops' | 'latMeanNs';
+type PrimaryKey = 'bwBps' | 'iops' | 'latMeanNs' | 'latP99Ns';
 
 interface ProfileChartMeta {
   primaryKey:       PrimaryKey;
@@ -96,7 +96,7 @@ interface ProfileChartMeta {
 const PROFILE_CHART_META: Record<BenchmarkProfile, ProfileChartMeta> = {
   seq_1m_qd1:  { primaryKey: 'bwBps',     primaryLabel: 'Throughput',   primaryFormat: formatBw,      yAxisLabel: 'MB/s',    higherIsBetter: true,  showLatencyLines: false },
   seq_1m_qd32: { primaryKey: 'bwBps',     primaryLabel: 'Throughput',   primaryFormat: formatBw,      yAxisLabel: 'MB/s',    higherIsBetter: true,  showLatencyLines: false },
-  rnd_4k_qd1:  { primaryKey: 'latMeanNs', primaryLabel: 'Mean Latency', primaryFormat: formatLatency, yAxisLabel: 'Latency', higherIsBetter: false, showLatencyLines: true  },
+  rnd_4k_qd1:  { primaryKey: 'latP99Ns',  primaryLabel: 'P99 Latency',  primaryFormat: formatLatency, yAxisLabel: 'Latency', higherIsBetter: false, showLatencyLines: true  },
   rnd_4k_qd32: { primaryKey: 'iops',      primaryLabel: 'IOPS',         primaryFormat: formatIops,    yAxisLabel: 'IOPS',    higherIsBetter: true,  showLatencyLines: false },
 };
 
@@ -353,7 +353,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
                 <th className="pb-2 pr-4 text-right text-gray-500 font-medium">{primaryLabel}</th>
                 {showLatencyLines && (
                   <>
-                    <th className="pb-2 pr-4 text-right text-gray-500 font-medium">P99</th>
+                    <th className="pb-2 pr-4 text-right text-gray-500 font-medium">Mean</th>
                     <th className="pb-2 pr-4 text-right text-gray-500 font-medium">P99.9</th>
                   </>
                 )}
@@ -390,7 +390,7 @@ export default function ProfileHistoryChart({ series, height = 260 }: ProfileHis
                     {showLatencyLines && (
                       <>
                         <td className="py-2 pr-4 text-right text-gray-400 font-mono tabular-nums">
-                          {formatLatency(pt.latP99Ns)}
+                          {formatLatency(pt.latMeanNs)}
                         </td>
                         <td className="py-2 pr-4 text-right text-gray-400 font-mono tabular-nums">
                           {formatLatency(pt.latP999Ns)}
