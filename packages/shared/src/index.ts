@@ -2,16 +2,16 @@
 
 /** Formats a byte count as a human-readable string (e.g. "2 TB") */
 export function formatBytes(bytes: number, decimals = 1): string {
-  if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
 }
 
 /** Formats bytes/sec as MB/s string */
 export function formatSpeed(bytesPerSec: number, decimals = 2): string {
-  return `${(bytesPerSec / 1_000_000).toFixed(decimals)} MB/s`;
+    return `${(bytesPerSec / 1_000_000).toFixed(decimals)} MB/s`;
 }
 
 // ─── Drive registry ──────────────────────────────────────────────────────────
@@ -21,68 +21,68 @@ export type DriveHealth = 'ok' | 'warning' | 'failed' | 'unknown';
 export type DashboardPreset = 'custom' | 'capacity' | 'capacity_asc' | 'temperature' | 'temperature_asc';
 
 export interface Drive {
-  driveId: number;
-  serialNumber: string;
-  devicePath: string;
-  vendor: string;
-  model: string;
-  firmwareRevision: string;
-  capacity: number;            // bytes
-  type: DriveType;
-  rpm: number | null;
-  interfaceType: string | null;
-  logicalSectorSize: number | null;
-  physicalSectorSize: number | null;
-  firstSeen: string;           // ISO 8601
-  lastSeen: string;            // ISO 8601
-  isConnected: boolean;
+    driveId: number;
+    serialNumber: string;
+    devicePath: string;
+    vendor: string;
+    model: string;
+    firmwareRevision: string;
+    capacity: number;            // bytes
+    type: DriveType;
+    rpm: number | null;
+    interfaceType: string | null;
+    logicalSectorSize: number | null;
+    physicalSectorSize: number | null;
+    firstSeen: string;           // ISO 8601
+    lastSeen: string;            // ISO 8601
+    isConnected: boolean;
 }
 
 export interface DriveSummary {
-  driveId: number;
-  serialNumber: string;
-  devicePath: string;
-  vendor: string;
-  model: string;
-  capacity: number;
-  type: DriveType;
-  isConnected: boolean;
-  health: DriveHealth;
-  temperature: number | null;
-  lastSmartPoll: string | null;        // ISO 8601
-  lastBenchmarkRun: string | null;     // ISO 8601
-  customLabel: string | null;          // null = use vendor+model
+    driveId: number;
+    serialNumber: string;
+    devicePath: string;
+    vendor: string;
+    model: string;
+    capacity: number;
+    type: DriveType;
+    isConnected: boolean;
+    health: DriveHealth;
+    temperature: number | null;
+    lastSmartPoll: string | null;        // ISO 8601
+    lastBenchmarkRun: string | null;     // ISO 8601
+    customLabel: string | null;          // null = use vendor+model
 }
 
 // ─── SMART ───────────────────────────────────────────────────────────────────
 
 export interface SmartAttribute {
-  attrId: number;
-  name: string;
-  value: number;
-  worst: number;
-  threshold: number;
-  rawValue: number;
-  failing: boolean;
+    attrId: number;
+    name: string;
+    value: number;
+    worst: number;
+    threshold: number;
+    rawValue: number;
+    failing: boolean;
 }
 
 export interface SmartReading {
-  driveId: number;
-  timestamp: string;           // ISO 8601
-  temperature: number | null;
-  powerOnHours: number | null;
-  powerCycleCount: number | null;
-  reallocatedSectors: number | null;
-  pendingSectors: number | null;
-  uncorrectableErrors: number | null;
-  healthPassed: boolean | null;
-  attributes: SmartAttribute[];
+    driveId: number;
+    timestamp: string;           // ISO 8601
+    temperature: number | null;
+    powerOnHours: number | null;
+    powerCycleCount: number | null;
+    reallocatedSectors: number | null;
+    pendingSectors: number | null;
+    uncorrectableErrors: number | null;
+    healthPassed: boolean | null;
+    attributes: SmartAttribute[];
 }
 
 export interface SmartAttributeHistory {
-  attrId: number;
-  name: string;
-  points: Array<{ timestamp: string; value: number; rawValue: number }>;
+    attrId: number;
+    name: string;
+    points: Array<{ timestamp: string; value: number; rawValue: number }>;
 }
 
 // ─── Benchmarks ──────────────────────────────────────────────────────────────
@@ -91,19 +91,19 @@ export type BenchmarkStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type TriggerType = 'manual' | 'scheduled';
 
 export interface BenchmarkRun {
-  runId: number;
-  driveId: number;
-  startedAt: string;           // ISO 8601
-  completedAt: string | null;  // ISO 8601
-  status: BenchmarkStatus;
-  triggerType: TriggerType;
-  numPoints: number;
-  errorMessage: string | null;
+    runId: number;
+    driveId: number;
+    startedAt: string;           // ISO 8601
+    completedAt: string | null;  // ISO 8601
+    status: BenchmarkStatus;
+    triggerType: TriggerType;
+    numPoints: number;
+    errorMessage: string | null;
 }
 
 export interface BenchmarkPoint {
-  position: number;            // byte offset on disk
-  speedBps: number;            // bytes/second
+    position: number;            // byte offset on disk
+    speedBps: number;            // bytes/second
 }
 
 // ─── fio profile results ─────────────────────────────────────────────────────
@@ -122,250 +122,256 @@ export type BenchmarkProfile = 'seq_1m_qd1' | 'seq_1m_qd32' | 'rnd_4k_qd1' | 'rn
 
 /** Aggregated metrics produced by a single fio profile run. */
 export interface ProfileResult {
-  profile:   BenchmarkProfile;
-  bwBps:     number;   // bytes/second
-  iops:      number;
-  latMeanNs: number;   // nanoseconds
-  latP50Ns:  number;
-  latP95Ns:  number;
-  latP99Ns:  number;
-  latP999Ns: number;
+    profile: BenchmarkProfile;
+    bwBps: number;   // bytes/second
+    iops: number;
+    latMeanNs: number;   // nanoseconds
+    latP50Ns: number;
+    latP95Ns: number;
+    latP99Ns: number;
+    latP999Ns: number;
 }
 
 export interface BenchmarkRunDetail extends BenchmarkRun {
-  points:         BenchmarkPoint[];
-  profileResults: ProfileResult[];
+    points: BenchmarkPoint[];
+    profileResults: ProfileResult[];
 }
 
 // ─── Speed curve chart ───────────────────────────────────────────────────────
 
 /** One benchmark run (for SpeedCurveChart) */
 export interface SpeedPoint {
-  spot: number;    // byte offset
-  speed: number;   // bytes/second
+    spot: number;    // byte offset
+    speed: number;   // bytes/second
 }
 
 export interface BenchmarkSeries {
-  runId:          number;
-  startedAt:      string;
-  points:         SpeedPoint[];
-  profileResults: ProfileResult[];
+    runId: number;
+    startedAt: string;
+    points: SpeedPoint[];
+    profileResults: ProfileResult[];
 }
 
 // ─── Schedules ───────────────────────────────────────────────────────────────
 
 export interface BenchmarkSchedule {
-  id: number;
-  driveId: number | null;      // null = all drives
-  cronExpression: string;
-  enabled: boolean;
-  numPoints: number;
-  lastRun: string | null;      // ISO 8601
-  nextRun: string | null;      // ISO 8601
-  createdAt: string;           // ISO 8601
-  label: string | null;
+    id: number;
+    driveId: number | null;      // null = all drives
+    cronExpression: string;
+    enabled: boolean;
+    numPoints: number;
+    lastRun: string | null;      // ISO 8601
+    nextRun: string | null;      // ISO 8601
+    createdAt: string;           // ISO 8601
+    label: string | null;
 }
 
 // ─── System stats ────────────────────────────────────────────────────────────
 
 export interface SystemStats {
-  totalDrives: number;
-  connectedDrives: number;
-  healthyDrives: number;
-  warningDrives: number;
-  failedDrives: number;
-  totalBenchmarkRuns: number;
-  lastScanTime: string | null;  // ISO 8601
+    totalDrives: number;
+    connectedDrives: number;
+    healthyDrives: number;
+    warningDrives: number;
+    failedDrives: number;
+    totalBenchmarkRuns: number;
+    lastScanTime: string | null;  // ISO 8601
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export type AlertType      = 'smart_error' | 'temperature' | 'benchmark_complete';
+export type AlertType = 'smart_error' | 'temperature' | 'benchmark_complete';
 /** Superset of AlertType — includes derived events that share a parent subscription. */
 export type AlertEventType = AlertType | 'temperature_recovery';
 export type ChannelType = 'webhook' | 'slack';
 
 export interface WebhookChannelConfig {
-  url: string;
-  auth:
-    | { type: 'none' }
-    | { type: 'basic';  username: string; password: string }
-    | { type: 'bearer'; token: string };
+    url: string;
+    auth:
+        | { type: 'none' }
+        | { type: 'basic'; username: string; password: string }
+        | { type: 'bearer'; token: string };
 }
-export interface SlackChannelConfig { webhookUrl: string; }
+
+export interface SlackChannelConfig {
+    webhookUrl: string;
+}
 
 export interface NotificationChannel {
-  id: number;
-  name: string;
-  type: ChannelType;
-  config: WebhookChannelConfig | SlackChannelConfig;
-  enabled: boolean;
-  createdAt: string;
+    id: number;
+    name: string;
+    type: ChannelType;
+    config: WebhookChannelConfig | SlackChannelConfig;
+    enabled: boolean;
+    createdAt: string;
 }
+
 export interface NotificationSubscription {
-  id: number;
-  channelId: number;
-  alertType: AlertType;
+    id: number;
+    channelId: number;
+    alertType: AlertType;
 }
+
 export interface DriveAlertThreshold {
-  driveId: number;
-  /** Warm→Hot boundary. Also the temperature at which an alert fires. */
-  temperatureThresholdCelsius: number;
-  /** Cold→Normal boundary (null = use default 25°C) */
-  tempNormalCelsius: number | null;
-  /** Normal→Warm boundary (null = use default 45°C) */
-  tempWarmCelsius: number | null;
-  /** Hot→Too Hot boundary (null = use default 65°C) */
-  tempTooHotCelsius: number | null;
+    driveId: number;
+    /** Warm→Hot boundary. Also the temperature at which an alert fires. */
+    temperatureThresholdCelsius: number;
+    /** Cold→Normal boundary (null = use default 25°C) */
+    tempNormalCelsius: number | null;
+    /** Normal→Warm boundary (null = use default 45°C) */
+    tempWarmCelsius: number | null;
+    /** Hot→Too Hot boundary (null = use default 65°C) */
+    tempTooHotCelsius: number | null;
 }
+
 export interface Alert {
-  type: AlertEventType;
-  driveId: number;
-  driveSerial: string;
-  driveModel: string;
-  message: string;
-  value?: number;
-  threshold?: number;
-  timestamp: string;
+    type: AlertEventType;
+    driveId: number;
+    driveSerial: string;
+    driveModel: string;
+    message: string;
+    value?: number;
+    threshold?: number;
+    timestamp: string;
 }
 
 export interface BenchmarkCompletePayload {
-  event: 'benchmark_complete';
-  timestamp: string;              // ISO 8601 — when notification was sent
-  scheduleLabel: string | null;
-  run: {
-    id: number;
-    startedAt: string;
-    completedAt: string;
-    durationSeconds: number;
-    status: 'completed' | 'failed';
-    errorMessage: string | null;
-    numPoints: number;
-  };
-  drive: {
-    id: number;
-    vendor: string;
-    model: string;
-    serialNumber: string;
-    capacityGb: number;
-    type: string;
-  };
+    event: 'benchmark_complete';
+    timestamp: string;              // ISO 8601 — when notification was sent
+    scheduleLabel: string | null;
+    run: {
+        id: number;
+        startedAt: string;
+        completedAt: string;
+        durationSeconds: number;
+        status: 'completed' | 'failed';
+        errorMessage: string | null;
+        numPoints: number;
+    };
+    drive: {
+        id: number;
+        vendor: string;
+        model: string;
+        serialNumber: string;
+        capacityGb: number;
+        type: string;
+    };
 }
 
 // ─── WebSocket live-feed ─────────────────────────────────────────────────────
 
 export interface DiskDetectedEvent {
-  type: 'disk_detected';
-  drive: DriveSummary;
+    type: 'disk_detected';
+    drive: DriveSummary;
 }
 
 export interface DiskRemovedEvent {
-  type: 'disk_removed';
-  driveId: number;
+    type: 'disk_removed';
+    driveId: number;
 }
 
 export interface SmartUpdatedEvent {
-  type: 'smart_updated';
-  driveId: number;
-  health: DriveHealth;
-  temperature: number | null;
-  /** Full reading pushed with the event so the frontend can skip an HTTP round-trip. */
-  reading: SmartReading;
+    type: 'smart_updated';
+    driveId: number;
+    health: DriveHealth;
+    temperature: number | null;
+    /** Full reading pushed with the event so the frontend can skip an HTTP round-trip. */
+    reading: SmartReading;
 }
 
 export interface BenchmarkStartedEvent {
-  type: 'benchmark_started';
-  runId: number;
-  driveId: number;
-  numPoints: number;
+    type: 'benchmark_started';
+    runId: number;
+    driveId: number;
+    numPoints: number;
 }
 
 export interface BenchmarkProgressEvent {
-  type: 'benchmark_progress';
-  runId: number;
-  pointIndex: number;
-  totalPoints: number;
-  speedBps: number;
-  /** Which phase is running: position-curve sampling or fio profile jobs. */
-  phase?: 'curve' | 'profiles';
-  /** Human-readable label for the current profile (only set when phase='profiles'). */
-  phaseLabel?: string;
+    type: 'benchmark_progress';
+    runId: number;
+    pointIndex: number;
+    totalPoints: number;
+    speedBps: number;
+    /** Which phase is running: position-curve sampling or fio profile jobs. */
+    phase?: 'curve' | 'profiles';
+    /** Human-readable label for the current profile (only set when phase='profiles'). */
+    phaseLabel?: string;
 }
 
 export interface BenchmarkCompletedEvent {
-  type: 'benchmark_completed';
-  runId: number;
-  driveId: number;
+    type: 'benchmark_completed';
+    runId: number;
+    driveId: number;
 }
 
 export interface BenchmarkFailedEvent {
-  type: 'benchmark_failed';
-  runId: number;
-  error: string;
+    type: 'benchmark_failed';
+    runId: number;
+    error: string;
 }
 
 export interface ConnectedEvent {
-  type: 'connected';
-  clientCount: number;
+    type: 'connected';
+    clientCount: number;
 }
 
 export type LiveFeedEvent =
-  | DiskDetectedEvent
-  | DiskRemovedEvent
-  | SmartUpdatedEvent
-  | BenchmarkStartedEvent
-  | BenchmarkProgressEvent
-  | BenchmarkCompletedEvent
-  | BenchmarkFailedEvent
-  | ConnectedEvent;
+    | DiskDetectedEvent
+    | DiskRemovedEvent
+    | SmartUpdatedEvent
+    | BenchmarkStartedEvent
+    | BenchmarkProgressEvent
+    | BenchmarkCompletedEvent
+    | BenchmarkFailedEvent
+    | ConnectedEvent;
 
 // ─── Web Push ─────────────────────────────────────────────────────────────────
 
 export interface PushSubscriptionPayload {
-  endpoint: string;
-  keys: { p256dh: string; auth: string };
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
 }
 
 // ─── Community reporting ──────────────────────────────────────────────────────
 
 export interface EnvironmentInfo {
-  osType:         string;   // os.type()   e.g. 'Linux'
-  osRelease:      string;   // os.release() e.g. '6.1.0-28-amd64'
-  osArch:         string;   // os.arch()   e.g. 'x64'
-  fioVersion:     string;   // 'fio-3.36' or 'unknown'
-  appVersion:     string;   // APP_VERSION env or 'dev'
-  ramTotalBytes:  number;   // os.totalmem()
-  swapTotalBytes: number;   // from /proc/swaps (0 on Windows/macOS)
-  swapActive:     boolean;
+    osType: string;   // os.type()   e.g. 'Linux'
+    osRelease: string;   // os.release() e.g. '6.1.0-28-amd64'
+    osArch: string;   // os.arch()   e.g. 'x64'
+    fioVersion: string;   // 'fio-3.36' or 'unknown'
+    appVersion: string;   // APP_VERSION env or 'dev'
+    ramTotalBytes: number;   // os.totalmem()
+    swapTotalBytes: number;   // from /proc/swaps (0 on Windows/macOS)
+    swapActive: boolean;
 }
 
 export interface CommunityReport {
-  schemaVersion:  1;
-  reportId:       string;       // random UUID — no user linkage
-  reportedAt:     string;       // ISO 8601
-  environment:    EnvironmentInfo;
-  drive: {
-    driveIdHash:         string;          // SHA-256(serial).slice(0,16)
-    vendor:              string;
-    model:               string;
-    firmwareRevision:    string;
-    capacityBytes:       number;
-    driveType:           string;
-    interfaceType:       string | null;
-    rpm:                 number | null;
-    logicalSectorBytes:  number | null;
-    physicalSectorBytes: number | null;
-    smart: {
-      powerOnHours:        number | null;
-      powerCycleCount:     number | null;
-      temperature:         number | null;
-      reallocatedSectors:  number | null;
-      pendingSectors:      number | null;
-      uncorrectableErrors: number | null;
-      healthPassed:        boolean | null;
-      attributes:          SmartAttribute[];
-    } | null;
-  };
-  profileResults: ProfileResult[];
-  positionCurve:  BenchmarkPoint[];
+    schemaVersion: 1;
+    reportId: string;       // random UUID — no user linkage
+    reportedAt: string;       // ISO 8601
+    environment: EnvironmentInfo;
+    drive: {
+        driveIdHash: string;          // SHA-256(serial).slice(0,16)
+        vendor: string;
+        model: string;
+        firmwareRevision: string;
+        capacityBytes: number;
+        driveType: string;
+        interfaceType: string | null;
+        rpm: number | null;
+        logicalSectorBytes: number | null;
+        physicalSectorBytes: number | null;
+        smart: {
+            powerOnHours: number | null | undefined;
+            powerCycleCount: number | null | undefined;
+            temperature: number | null | undefined;
+            reallocatedSectors: number | null | undefined;
+            pendingSectors: number | null | undefined;
+            uncorrectableErrors: number | null | undefined;
+            healthPassed: boolean | null | undefined;
+            attributes: SmartAttribute[];
+        } | null;
+    };
+    profileResults: ProfileResult[];
+    positionCurve: BenchmarkPoint[];
 }

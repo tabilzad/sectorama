@@ -14,7 +14,7 @@ function hashSerial(serial: string): string {
 
 export function buildCommunityReport(
   driveRow:       DriveRow,
-  smartCache:     SmartCacheRow,
+  smartCache:     SmartCacheRow | null,
   smartAttrs:     SmartAttribute[],
   profileResults: ProfileResult[],
   curvePoints:    BenchmarkPoint[],

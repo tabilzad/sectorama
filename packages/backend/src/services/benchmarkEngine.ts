@@ -1,6 +1,6 @@
 import { eq, and, inArray } from 'drizzle-orm';
 import { Point } from '@influxdata/influxdb-client';
-import { getDb } from '../db/index.js';
+import { getDb } from '../db';
 import { drives, benchmarkRuns } from '../db/schema.js';
 import { getWriteApi } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
