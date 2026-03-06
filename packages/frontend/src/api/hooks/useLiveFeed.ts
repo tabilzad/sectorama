@@ -70,10 +70,34 @@ export function useLiveFeed(): LiveFeedState {
             void queryClient.invalidateQueries({ queryKey: ['benchmark-run', event.runId] });
             // Refresh the full series overlay now that a new run's data is in InfluxDB
             void queryClient.invalidateQueries({ queryKey: ['drive-benchmark-series', event.driveId] });
+            // Remove from active-benchmark-runs map
+            const prev = queryClient.getQueryData<Record<number, number>>(['active-benchmark-runs']) ?? {};
+            const next = { ...prev };
+            delete next[event.driveId];
+            queryClient.setQueryData(['active-benchmark-runs'], next);
+          }
+
+          if (event.type === 'benchmark_failed') {
+            // Look up driveId from reverse map since BenchmarkFailedEvent only has runId
+            const runMap = queryClient.getQueryData<Record<number, number>>(['run-id-to-drive-id']) ?? {};
+            const driveId = runMap[event.runId];
+            if (driveId != null) {
+              void queryClient.invalidateQueries({ queryKey: ['drive-benchmarks', driveId] });
+              const prev = queryClient.getQueryData<Record<number, number>>(['active-benchmark-runs']) ?? {};
+              const next = { ...prev };
+              delete next[driveId];
+              queryClient.setQueryData(['active-benchmark-runs'], next);
+            }
           }
 
           if (event.type === 'benchmark_started') {
             void queryClient.invalidateQueries({ queryKey: ['benchmark-run', event.runId] });
+            // Track driveId → runId for dashboard card indicators
+            const prev = queryClient.getQueryData<Record<number, number>>(['active-benchmark-runs']) ?? {};
+            queryClient.setQueryData(['active-benchmark-runs'], { ...prev, [event.driveId]: event.runId });
+            // Reverse map: runId → driveId (needed to clean up on benchmark_failed)
+            const prevMap = queryClient.getQueryData<Record<number, number>>(['run-id-to-drive-id']) ?? {};
+            queryClient.setQueryData(['run-id-to-drive-id'], { ...prevMap, [event.runId]: event.driveId });
           }
 
           if (event.type === 'benchmark_progress') {

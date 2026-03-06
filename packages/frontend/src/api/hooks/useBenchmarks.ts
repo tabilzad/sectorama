@@ -34,6 +34,22 @@ export function useBenchmarkRun(driveId: number | null, runId: number | null) {
   });
 }
 
+/**
+ * Returns the active runId for the given drive, or null if no benchmark is running.
+ * Subscribes to the query cache written by useLiveFeed on benchmark_started/completed/failed.
+ */
+export function useActiveBenchmarkRunId(driveId: number): number | null {
+  const queryClient = useQueryClient();
+  const { data } = useQuery<Record<number, number>>({
+    queryKey: ['active-benchmark-runs'],
+    queryFn:  () => ({}),
+    enabled:  false,
+    staleTime: Infinity,
+  });
+  const cached = queryClient.getQueryData<Record<number, number>>(['active-benchmark-runs']);
+  return (data ?? cached)?.[driveId] ?? null;
+}
+
 /** Subscribes to live benchmark progress state fed by WebSocket events via useLiveFeed. */
 export function useBenchmarkProgress(runId: number | null): BenchmarkProgressState | undefined {
   const queryClient = useQueryClient();

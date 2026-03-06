@@ -15,6 +15,77 @@ import { DriveAlertSettings } from './DriveAlertSettings';
 import { formatBytes } from '@/lib/formatBytes.ts';
 import type { SmartAttribute } from '@sectorama/shared';
 
+// ── Skeleton placeholders shown while a benchmark is in progress ──────────────
+
+function ChartSkeleton({ height = 380 }: { height?: number }) {
+  return (
+    <div
+      className="relative rounded-lg bg-surface-200 overflow-hidden flex items-center justify-center"
+      style={{ height }}
+    >
+      {/* Shimmer sweep */}
+      <div className="absolute inset-0 shimmer pointer-events-none" />
+
+      {/* Fake grid lines */}
+      <div className="absolute left-12 right-4 top-6 bottom-10 flex flex-col justify-between pointer-events-none">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="w-full h-px bg-surface-300/40" />
+        ))}
+      </div>
+      {/* Fake y-axis labels */}
+      <div className="absolute left-3 top-6 bottom-10 flex flex-col justify-between pointer-events-none">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="h-2 w-7 rounded bg-surface-300/60 animate-pulse"
+            style={{ animationDelay: `${i * 120}ms` }}
+          />
+        ))}
+      </div>
+
+      {/* Centre animation + message */}
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        <div className="flex gap-1.5 items-end">
+          {[10, 18, 14, 26, 20, 34, 24, 30, 16, 24, 20, 14].map((h, i) => (
+            <div
+              key={i}
+              className="w-2.5 rounded-sm bg-accent/30 animate-pulse"
+              style={{ height: h, animationDelay: `${i * 65}ms` }}
+            />
+          ))}
+        </div>
+        <p className="text-xs text-gray-500">Chart data will appear when the benchmark completes</p>
+      </div>
+    </div>
+  );
+}
+
+function ProfileResultsSkeleton() {
+  return (
+    <div className="space-y-3">
+      <div className="h-4 w-36 bg-surface-300 rounded animate-pulse" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map(i => (
+          <div
+            key={i}
+            className="rounded-lg bg-surface-200 p-4 space-y-2.5 shimmer"
+            style={{ animationDelay: `${i * 80}ms` }}
+          >
+            <div className="h-2.5 w-20 bg-surface-300/70 rounded animate-pulse" />
+            <div className="h-6 w-16 bg-surface-300/60 rounded animate-pulse" style={{ animationDelay: `${i * 80 + 40}ms` }} />
+            <div className="space-y-1.5">
+              <div className="h-2 w-24 bg-surface-300/40 rounded animate-pulse" style={{ animationDelay: `${i * 80 + 80}ms` }} />
+              <div className="h-2 w-20 bg-surface-300/40 rounded animate-pulse" style={{ animationDelay: `${i * 80 + 120}ms` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function formatPowerOnTime(hours: number | null | undefined): string {
   if (hours == null) return '—';
   const days = hours / 24;
@@ -311,28 +382,58 @@ export default function DriveDetailPage() {
             ))}
           </div>
 
-          {/* Speed curve — all completed runs overlaid */}
-          {allSeries && allSeries.length > 0 && (
+          {/* Speed curve — all completed runs overlaid (or skeleton when first run is in progress) */}
+          {allSeries && allSeries.length > 0 ? (
             <div className="card mt-6">
-              <h3 className="text-sm font-semibold text-white mb-4">
-                Speed Curve
-                <span className="ml-2 text-xs font-normal text-gray-500">
-                  {allSeries.length} run{allSeries.length !== 1 ? 's' : ''} overlaid
-                </span>
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">
+                  Speed Curve
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    {allSeries.length} run{allSeries.length !== 1 ? 's' : ''} overlaid
+                  </span>
+                </h3>
+                {progressRun && (
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-accent uppercase">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    Run in progress
+                  </span>
+                )}
+              </div>
               <SpeedCurveChart series={allSeries} />
             </div>
-          )}
+          ) : progressRun ? (
+            <div className="card mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Speed Curve</h3>
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-accent uppercase">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                  Collecting data
+                </span>
+              </div>
+              <ChartSkeleton height={380} />
+            </div>
+          ) : null}
 
-          {/* Profile history — trends across all completed runs */}
-          {allSeries && allSeries.length > 0 && (
+          {/* Profile history — trends across all completed runs (or skeleton) */}
+          {allSeries && allSeries.length > 0 ? (
             <div className="card mt-6">
               <ProfileHistoryChart series={allSeries} />
             </div>
-          )}
+          ) : progressRun ? (
+            <div className="card mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Profile Trends</h3>
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-widest text-accent uppercase">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                  Awaiting completion
+                </span>
+              </div>
+              <ChartSkeleton height={300} />
+            </div>
+          ) : null}
 
-          {/* fio profile results for the selected run */}
-          {runDetail?.profileResults && runDetail.profileResults.length > 0 && (
+          {/* fio profile results for the selected run (or skeleton when run is active) */}
+          {runDetail?.profileResults && runDetail.profileResults.length > 0 ? (
             <div className="card mt-4">
               <h3 className="text-sm font-semibold text-white mb-3">
                 Run #{runDetail.runId} Details
@@ -342,7 +443,11 @@ export default function DriveDetailPage() {
               </h3>
               <ProfileResultsPanel results={runDetail.profileResults} />
             </div>
-          )}
+          ) : progressRun ? (
+            <div className="card mt-4">
+              <ProfileResultsSkeleton />
+            </div>
+          ) : null}
         </div>
       )}
 

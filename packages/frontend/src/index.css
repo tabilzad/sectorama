@@ -33,10 +33,32 @@
   100% { transform: rotate(0.5deg);  }
 }
 
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Indeterminate progress bar slide */
+@keyframes slide-bar {
+  0%   { transform: translateX(-200%); }
+  100% { transform: translateX(600%); }
+}
+
 @layer utilities {
   .card-jiggle {
     animation: card-jiggle 0.45s ease-in-out infinite alternate;
     transform-origin: center;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(43, 144, 143, 0.07) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
   }
 }
 
