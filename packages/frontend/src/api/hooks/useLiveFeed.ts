@@ -26,8 +26,12 @@ const WS_URL = (() => {
 })();
 
 export function useLiveFeed(): LiveFeedState {
-  const queryClient = useQueryClient();
-  const wsRef       = useRef<WebSocket | null>(null);
+  const queryClient    = useQueryClient();
+  const wsRef          = useRef<WebSocket | null>(null);
+  // Tracks whether a successful connection has been made before, so we can
+  // distinguish an initial connect from a reconnect after a dropout.
+  const hasConnectedRef = useRef(false);
+
   const [connected,         setConnected]         = useState(false);
   const [lastSmartEvent,    setLastSmartEvent]     = useState<SmartUpdatedEvent | null>(null);
   const [lastBenchmarkDone, setLastBenchmarkDone] = useState<BenchmarkCompletedEvent | null>(null);
@@ -41,7 +45,20 @@ export function useLiveFeed(): LiveFeedState {
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
-      ws.onopen  = () => { if (!aborted) setConnected(true); };
+      ws.onopen = () => {
+        if (aborted) return;
+        setConnected(true);
+
+        // On reconnect (not initial connect) invalidate the two queries whose
+        // updates are event-driven. This catches any events missed during the
+        // disconnect window without needing a background polling interval.
+        if (hasConnectedRef.current) {
+          void queryClient.invalidateQueries({ queryKey: ['disks'] });
+          void queryClient.invalidateQueries({ queryKey: ['stats'] });
+        }
+        hasConnectedRef.current = true;
+      };
+
       ws.onclose = () => {
         if (aborted) return;
         setConnected(false);
@@ -65,6 +82,8 @@ export function useLiveFeed(): LiveFeedState {
           if (event.type === 'benchmark_completed') {
             setLastBenchmarkDone(event);
             void queryClient.invalidateQueries({ queryKey: ['drive-benchmarks', event.driveId] });
+            // ['disks'] includes lastBenchmarkRun per DriveSummary — update it now
+            void queryClient.invalidateQueries({ queryKey: ['disks'] });
             void queryClient.invalidateQueries({ queryKey: ['stats'] });
             // Invalidate run detail so chart fetches InfluxDB data now that it's fully written
             void queryClient.invalidateQueries({ queryKey: ['benchmark-run', event.runId] });

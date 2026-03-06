@@ -56,8 +56,13 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8888',
-        ws: true,
+        target:  'ws://localhost:8888',
+        ws:      true,
+        // Disable the proxy socket timeout so the dev proxy never drops an idle
+        // WebSocket connection. The server-side heartbeat (ping every 30 s) keeps
+        // the connection alive at the network layer; we don't want the proxy
+        // adding an additional timeout on top of that.
+        timeout: 0,
       },
       '/drive-images': {
         target: 'http://localhost:8888',

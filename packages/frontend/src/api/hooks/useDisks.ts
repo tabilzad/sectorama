@@ -5,9 +5,11 @@ import type { Drive, DriveSummary, DashboardPreset } from '@sectorama/shared';
 
 export function useDisks() {
   return useQuery<DriveSummary[]>({
-    queryKey:        ['disks'],
-    queryFn:         () => api.get<DriveSummary[]>(API.disks.list).then(r => r.data),
-    refetchInterval: 60_000,
+    queryKey: ['disks'],
+    queryFn:  () => api.get<DriveSummary[]>(API.disks.list).then(r => r.data),
+    // No refetchInterval — useLiveFeed invalidates this key on every event that
+    // changes drive state (smart_updated, disk_detected/removed, benchmark_completed).
+    // A catch-up refetch fires automatically on WS reconnect (see useLiveFeed).
   });
 }
 
