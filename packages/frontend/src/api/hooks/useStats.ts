@@ -5,10 +5,10 @@ import type { SystemStats } from '@sectorama/shared';
 
 export function useStats() {
   return useQuery<SystemStats>({
-    queryKey: ['stats'],
-    queryFn:  () => api.get<SystemStats>(API.stats).then(r => r.data),
-    // No refetchInterval — useLiveFeed invalidates this key on every event that
-    // changes aggregate counts (smart_updated, disk_detected/removed, benchmark_completed).
-    // A catch-up refetch fires automatically on WS reconnect (see useLiveFeed).
+    queryKey:  ['stats'],
+    queryFn:   () => api.get<SystemStats>(API.stats).then(r => r.data),
+    // staleTime: Infinity — same reasoning as useDisks. All invalidations are
+    // event-driven via useLiveFeed; no automatic background refetching needed.
+    staleTime: Infinity,
   });
 }

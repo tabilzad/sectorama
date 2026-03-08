@@ -5,11 +5,15 @@ import type { Drive, DriveSummary, DashboardPreset } from '@sectorama/shared';
 
 export function useDisks() {
   return useQuery<DriveSummary[]>({
-    queryKey: ['disks'],
-    queryFn:  () => api.get<DriveSummary[]>(API.disks.list).then(r => r.data),
-    // No refetchInterval — useLiveFeed invalidates this key on every event that
-    // changes drive state (smart_updated, disk_detected/removed, benchmark_completed).
-    // A catch-up refetch fires automatically on WS reconnect (see useLiveFeed).
+    queryKey:  ['disks'],
+    queryFn:   () => api.get<DriveSummary[]>(API.disks.list).then(r => r.data),
+    // staleTime: Infinity — data never goes stale on its own, so TanStack Query
+    // will not auto-refetch on window focus, remount, or network reconnect.
+    // The only way this query refreshes is via an explicit invalidateQueries()
+    // call from useLiveFeed (smart_updated, disk_detected/removed, benchmark_completed,
+    // and WS reconnect). invalidateQueries bypasses staleTime and always refetches
+    // when there are active observers.
+    staleTime: Infinity,
   });
 }
 
