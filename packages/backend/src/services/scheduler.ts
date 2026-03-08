@@ -82,10 +82,17 @@ export async function initScheduler(): Promise<void> {
 /** Start a periodic SMART poll for all connected drives */
 export function initSmartPoller(): void {
   const intervalMinutes = config.smart.pollIntervalMinutes;
-  // node-cron doesn't allow "every N minutes" unless it divides 60; use * for short intervals
+
+  // Use a 6-field expression (sec min hr day mon wday) with sec=30 to avoid a
+  // node-cron v4 bug: getNextMatch() returns the CURRENT minute (already elapsed
+  // by a few seconds) when the process starts mid-minute and second field is [0],
+  // causing getDelay()=0 and an infinite immediate-heartbeat loop that floods the
+  // log with "missed execution" warnings. With sec=30, availableValue([30], N)
+  // for any N<30 returns 30 (a future time within the same minute), and for N>=30
+  // advances to the next matching minute — both cases yield a positive delay.
   const cronExpr = intervalMinutes >= 60
-    ? `0 */${Math.floor(intervalMinutes / 60)} * * *`
-    : `*/${intervalMinutes} * * * *`;
+    ? `30 0 */${Math.floor(intervalMinutes / 60)} * * *`
+    : `30 */${intervalMinutes} * * * *`;
 
   schedule(cronExpr, async () => {
     try {

@@ -105,21 +105,19 @@ async function main() {
     console.warn('[sectorama] Initial disk scan failed (non-fatal):', err);
   }
 
-  // ── Initial SMART cache warm-up (read + SQLite only, no InfluxDB) ─────────
-  // The scheduler's first tick at SMART_POLL_INTERVAL_MINUTES will be the first InfluxDB write.
-  try {
-    await refreshAllSmart();
-  } catch (err) {
-    console.warn('[sectorama] SMART cache warm-up failed (non-fatal):', err);
-  }
+  // ── Start server ──────────────────────────────────────────────────────────
+  await app.listen({ port: config.port, host: '0.0.0.0' });
+  console.log(`[sectorama] Server running on http://0.0.0.0:${config.port}`);
 
   // ── Start schedulers ──────────────────────────────────────────────────────
   await initScheduler();
   initSmartPoller();
 
-  // ── Start server ──────────────────────────────────────────────────────────
-  await app.listen({ port: config.port, host: '0.0.0.0' });
-  console.log(`[sectorama] Server running on http://0.0.0.0:${config.port}`);
+  // ── Initial SMART cache warm-up (non-blocking, runs in background) ────────
+  // The scheduler's first tick at SMART_POLL_INTERVAL_MINUTES will be the first InfluxDB write.
+  refreshAllSmart().catch(err =>
+    console.warn('[sectorama] SMART cache warm-up failed (non-fatal):', err),
+  );
 }
 
 main().catch(err => {

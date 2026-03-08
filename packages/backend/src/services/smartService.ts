@@ -51,14 +51,33 @@ interface SmartctlXallResult {
 
 // ─── Private parsing helpers ─────────────────────────────────────────────────
 
+const SMARTCTL_TIMEOUT_MS = 30_000;
+
 async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> {
+  // Use Promise.race rather than the execFile timeout option: the timeout option
+  // sends SIGTERM but if smartctl is in kernel D-state (uninterruptible I/O wait
+  // on a slow/unresponsive drive) SIGTERM is silently ignored and the process
+  // never exits, so the promise never settles. Promise.race rejects after
+  // SMARTCTL_TIMEOUT_MS regardless of what the child process does.
+  const execPromise = execFileAsync('smartctl', ['--xall', '--json', devicePath]);
+
+  let timer!: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`smartctl timed out after ${SMARTCTL_TIMEOUT_MS / 1000}s for ${devicePath}`)),
+      SMARTCTL_TIMEOUT_MS,
+    );
+  });
+
   try {
-    const { stdout } = await execFileAsync('smartctl', ['--xall', '--json', devicePath], { timeout: 30_000 });
+    const { stdout } = await Promise.race([execPromise, timeoutPromise]);
+    clearTimeout(timer);
     return JSON.parse(stdout) as SmartctlXallResult;
   } catch (err: unknown) {
+    clearTimeout(timer);
     const e = err as { stdout?: string; stderr?: string; code?: number };
     console.error(
-      `[smartService] smartctl --xall --json ${devicePath} exited code=${e.code ?? '?'}`,
+      `[smartService] smartctl --xall --json ${devicePath} failed: ${(err as Error).message ?? `code=${e.code ?? '?'}`}`,
       e.stderr ? `\n  stderr: ${e.stderr.trim()}` : '',
     );
     if (e.stdout) {
@@ -268,7 +287,7 @@ export async function scheduledSmartPoll(driveId: number): Promise<SmartReading 
 }
 
 /**
- * Warm up the SQLite cache for all connected drives on startup.
+ * Warm up the SQLite cache for all connected drives on startup (parallel).
  * Does NOT write to InfluxDB — the scheduler's first tick handles that.
  */
 export async function refreshAllSmart(): Promise<void> {
@@ -276,11 +295,13 @@ export async function refreshAllSmart(): Promise<void> {
   const connectedDrives = await db.query.drives.findMany({
     where: eq(drives.isConnected, true),
   });
-  for (const drive of connectedDrives) {
-    try {
-      await refreshSmartForDrive(drive.driveId);
-    } catch (err) {
-      console.error(`[smartService] SMART cache warm-up failed for ${drive.devicePath}:`, err);
+  const results = await Promise.allSettled(
+    connectedDrives.map(drive => refreshSmartForDrive(drive.driveId)),
+  );
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]!;
+    if (r.status === 'rejected') {
+      console.error(`[smartService] SMART cache warm-up failed for ${connectedDrives[i]!.devicePath}:`, r.reason);
     }
   }
 }
