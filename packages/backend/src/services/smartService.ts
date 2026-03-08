@@ -53,7 +53,7 @@ interface SmartctlXallResult {
 
 async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> {
   try {
-    const { stdout } = await execFileAsync('smartctl', ['--xall', '--json', devicePath]);
+    const { stdout } = await execFileAsync('smartctl', ['--xall', '--json', devicePath], { timeout: 30_000 });
     return JSON.parse(stdout) as SmartctlXallResult;
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number };
@@ -285,17 +285,19 @@ export async function refreshAllSmart(): Promise<void> {
   }
 }
 
-/** Run a full scheduled poll for all connected drives. */
+/** Run a full scheduled poll for all connected drives (parallel). */
 export async function pollAllSmart(): Promise<void> {
   const db = getDb();
   const connectedDrives = await db.query.drives.findMany({
     where: eq(drives.isConnected, true),
   });
-  for (const drive of connectedDrives) {
-    try {
-      await scheduledSmartPoll(drive.driveId);
-    } catch (err) {
-      console.error(`[smartService] SMART poll failed for ${drive.devicePath}:`, err);
+  const results = await Promise.allSettled(
+    connectedDrives.map(drive => scheduledSmartPoll(drive.driveId)),
+  );
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]!;
+    if (r.status === 'rejected') {
+      console.error(`[smartService] SMART poll failed for ${connectedDrives[i]!.devicePath}:`, r.reason);
     }
   }
 }
