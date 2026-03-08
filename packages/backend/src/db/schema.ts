@@ -67,6 +67,7 @@ export const smartCache = sqliteTable('smart_cache', {
   pendingSectors:      integer('pending_sectors'),
   uncorrectableErrors: integer('uncorrectable_errors'),
   healthPassed:        integer('health_passed', { mode: 'boolean' }),
+  attributesJson:      text('attributes_json'),  // JSON-serialised SmartAttribute[]
 });
 
 // ─── Notification Channels ────────────────────────────────────────────────────

@@ -135,6 +135,7 @@ export function initDb(): void {
     'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_warm_celsius INTEGER',
     'ALTER TABLE drive_alert_thresholds ADD COLUMN temp_too_hot_celsius INTEGER',
     'ALTER TABLE benchmark_schedules ADD COLUMN label TEXT',
+    'ALTER TABLE smart_cache ADD COLUMN attributes_json TEXT',
   ]) {
     try { sqlite.exec(col); } catch { /* column already exists — safe to ignore */ }
   }

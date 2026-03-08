@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
-import { getDb } from '../../db/index.js';
+import { getDb } from '../../db';
 import { drives, benchmarkRuns, smartCache as smartCacheTable, driveDisplayPrefs, settings } from '../../db/schema.js';
 import { scanDisks, registerDrives, getDriveSummaries } from '../../services/diskDiscovery.js';
-import { refreshSmartForDrive, getSmartHistory } from '../../services/smartService.js';
+import { getSmartReadingFromCache, getSmartHistory } from '../../services/smartService.js';
 import { createRun, executeBenchmark, getRunDetail, getDriveSeries, deleteRun, purgeAllRuns } from '../../services/benchmarkEngine.js';
 import { config } from '../../config.js';
 import type {
@@ -53,12 +53,11 @@ export async function driveRoutes(app: FastifyInstance): Promise<void> {
     return reply.send(drive);
   });
 
-  // GET /api/v1/disks/:driveId/smart — latest full SMART reading
+  // GET /api/v1/disks/:driveId/smart — latest cached SMART reading (no live smartctl call)
   app.get<{ Params: { driveId: string }; Reply: SmartReading }>('/api/v1/disks/:driveId/smart', async (req, reply) => {
     const driveId = parseInt(req.params.driveId, 10);
-
-    const reading = await refreshSmartForDrive(driveId);
-    if (!reading) return reply.status(404).send({ error: 'Drive not found' } as any);
+    const reading = await getSmartReadingFromCache(driveId);
+    if (!reading) return reply.status(404).send({ error: 'No SMART data cached yet' } as any);
     return reply.send(reading);
   });
 

@@ -9,7 +9,7 @@ import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
 import { deriveHealth } from '../utils/health.js';
-import type { SmartReading, SmartAttribute } from '@sectorama/shared';
+import type { SmartReading, SmartAttribute, SmartUpdatedEvent } from '@sectorama/shared';
 import type { DriveRow, SmartCacheRow } from '../db/schema.js';
 
 const execFileAsync = promisify(execFile);
@@ -177,7 +177,8 @@ async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<
 /** Stage 2: Persist the latest reading snapshot to the SQLite cache. */
 async function updateSmartCache(driveId: number, reading: SmartReading): Promise<void> {
   const db = getDb();
-  const now = reading.timestamp;
+  const now            = reading.timestamp;
+  const attributesJson = JSON.stringify(reading.attributes);
   await db.insert(smartCache)
     .values({
       driveId,
@@ -189,6 +190,7 @@ async function updateSmartCache(driveId: number, reading: SmartReading): Promise
       pendingSectors:      reading.pendingSectors,
       uncorrectableErrors: reading.uncorrectableErrors,
       healthPassed:        reading.healthPassed,
+      attributesJson,
     })
     .onConflictDoUpdate({
       target: smartCache.driveId,
@@ -201,8 +203,29 @@ async function updateSmartCache(driveId: number, reading: SmartReading): Promise
         pendingSectors:      reading.pendingSectors,
         uncorrectableErrors: reading.uncorrectableErrors,
         healthPassed:        reading.healthPassed,
+        attributesJson,
       },
     });
+}
+
+/** Construct a SmartReading from a cache row. */
+function smartCacheRowToReading(row: SmartCacheRow): SmartReading {
+  let attributes: SmartAttribute[] = [];
+  if (row.attributesJson) {
+    try { attributes = JSON.parse(row.attributesJson) as SmartAttribute[]; } catch { /* ignore */ }
+  }
+  return {
+    driveId:             row.driveId,
+    timestamp:           row.polledAt,
+    temperature:         row.temperature         ?? null,
+    powerOnHours:        row.powerOnHours        ?? null,
+    powerCycleCount:     row.powerCycleCount     ?? null,
+    reallocatedSectors:  row.reallocatedSectors  ?? null,
+    pendingSectors:      row.pendingSectors       ?? null,
+    uncorrectableErrors: row.uncorrectableErrors ?? null,
+    healthPassed:        row.healthPassed         ?? null,
+    attributes,
+  };
 }
 
 /** Stage 3: Write a reading to InfluxDB (scheduled polls only). */
@@ -248,7 +271,7 @@ async function writeSmartToInflux(driveRow: DriveRow, reading: SmartReading): Pr
 /**
  * Read fresh SMART data from the device and update the SQLite cache.
  * Does NOT write to InfluxDB and does NOT broadcast a WS event.
- * Use this for on-demand API requests where the caller just wants current data.
+ * Use this for warm-up / cache population, not for HTTP GET requests.
  */
 export async function refreshSmartForDrive(driveId: number): Promise<SmartReading | null> {
   const db = getDb();
@@ -258,6 +281,37 @@ export async function refreshSmartForDrive(driveId: number): Promise<SmartReadin
   const reading = await readSmartFromDrive(driveId, driveRow);
   await updateSmartCache(driveId, reading);
   return reading;
+}
+
+/**
+ * Return the last cached SmartReading for a drive from SQLite.
+ * Used by the HTTP GET /smart endpoint — no smartctl invocation.
+ * Returns null if the cache has not been populated yet (before warm-up).
+ */
+export async function getSmartReadingFromCache(driveId: number): Promise<SmartReading | null> {
+  const db  = getDb();
+  const row = await db.query.smartCache.findFirst({ where: eq(smartCache.driveId, driveId) });
+  return row ? smartCacheRowToReading(row) : null;
+}
+
+/**
+ * Build a SmartUpdatedEvent for every drive in the cache.
+ * Called once after startup warm-up to seed the WS replay map so clients
+ * connecting before the first scheduled poll still receive the latest data.
+ */
+export async function getAllCachedSmartEvents(): Promise<SmartUpdatedEvent[]> {
+  const db   = getDb();
+  const rows = await db.query.smartCache.findMany();
+  return rows.map(row => {
+    const reading = smartCacheRowToReading(row);
+    const health  = deriveHealth(
+      row.healthPassed,
+      row.reallocatedSectors,
+      row.pendingSectors,
+      row.uncorrectableErrors,
+    );
+    return { type: 'smart_updated' as const, driveId: row.driveId, health, temperature: row.temperature ?? null, reading };
+  });
 }
 
 /**

@@ -5,13 +5,13 @@ import websocket from '@fastify/websocket';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config.js';
-import { initDb } from './db/index.js';
-import { registerRoutes } from './routes/index.js';
+import { initDb } from './db';
+import { registerRoutes } from './routes';
 import { initVapid } from './services/pushService.js';
-import { registerLiveFeed } from './ws/liveFeed.js';
+import { registerLiveFeed, initSmartReplay } from './ws/liveFeed.js';
 import { initScheduler, initSmartPoller } from './services/scheduler.js';
 import { scanDisks, registerDrives } from './services/diskDiscovery.js';
-import { refreshAllSmart } from './services/smartService.js';
+import { refreshAllSmart, getAllCachedSmartEvents } from './services/smartService.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -114,10 +114,12 @@ async function main() {
   initSmartPoller();
 
   // ── Initial SMART cache warm-up (non-blocking, runs in background) ────────
-  // The scheduler's first tick at SMART_POLL_INTERVAL_MINUTES will be the first InfluxDB write.
-  refreshAllSmart().catch(err =>
-    console.warn('[sectorama] SMART cache warm-up failed (non-fatal):', err),
-  );
+  // After warm-up, seed the WS replay map so clients connecting before the first
+  // scheduled poll receive the last-known readings without an HTTP round-trip.
+  refreshAllSmart()
+    .then(() => getAllCachedSmartEvents())
+    .then(events => initSmartReplay(events))
+    .catch(err => console.warn('[sectorama] SMART cache warm-up failed (non-fatal):', err));
 }
 
 main().catch(err => {

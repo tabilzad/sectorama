@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from '@fastify/websocket';
-import type { LiveFeedEvent } from '@sectorama/shared';
+import type { LiveFeedEvent, SmartUpdatedEvent } from '@sectorama/shared';
 
 /** All currently-connected live-feed WebSocket clients */
 const clients = new Set<WebSocket>();
@@ -11,6 +11,24 @@ const clients = new Set<WebSocket>();
  * Cleared when benchmark_completed or benchmark_failed is broadcast.
  */
 let activeProgress: LiveFeedEvent | null = null;
+
+/**
+ * Last smart_updated event per drive.
+ * Replayed to newly-connecting clients so they get current SMART data immediately
+ * without needing to wait for the next scheduled poll or make an HTTP request.
+ */
+const lastSmartByDrive = new Map<number, SmartUpdatedEvent>();
+
+/**
+ * Seed the replay map from the SQLite cache on startup.
+ * Call this once after the warm-up completes so clients connecting before the
+ * first scheduled poll still receive the last-known readings.
+ */
+export function initSmartReplay(events: SmartUpdatedEvent[]): void {
+  for (const event of events) {
+    lastSmartByDrive.set(event.driveId, event);
+  }
+}
 
 /**
  * How often to send a WebSocket ping frame (ms).
@@ -58,6 +76,12 @@ export function registerLiveFeed(app: FastifyInstance): void {
     // Send a welcome message so the client knows it is connected
     socket.send(JSON.stringify({ type: 'connected', clientCount: clients.size }));
 
+    // Replay the last known SMART reading for every drive so the client
+    // gets current data immediately without an HTTP round-trip.
+    for (const event of lastSmartByDrive.values()) {
+      socket.send(JSON.stringify(event));
+    }
+
     // If a benchmark is in progress, replay the last known progress event so the
     // client can restore the progress bar without waiting for the next tick.
     if (activeProgress) {
@@ -68,6 +92,11 @@ export function registerLiveFeed(app: FastifyInstance): void {
 
 /** Broadcast an event to all connected clients */
 export function broadcast(event: LiveFeedEvent): void {
+  // Track the last SMART reading per drive for on-connect replay.
+  if (event.type === 'smart_updated') {
+    lastSmartByDrive.set(event.driveId, event);
+  }
+
   // Track the last progress event so new connections can catch up mid-run.
   if (event.type === 'benchmark_progress') {
     activeProgress = event;
