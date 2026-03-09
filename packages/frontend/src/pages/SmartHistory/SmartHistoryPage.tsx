@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDisks } from '@/api/hooks/useDisks.ts';
 import { useSmartHistory } from '@/api/hooks/useSmart.ts';
-import { useAlertThresholds } from '../../api/hooks/useNotifications';
+import { useAlertThresholds } from '@/api/hooks/useNotifications.ts';
 import SmartAttributeChart, { type TempZoneConfig } from '../../components/charts/SmartAttributeChart';
 import { ZONE_DEFAULTS } from '../DriveDetail/DriveAlertSettings';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
@@ -138,8 +139,12 @@ type DriveSelection = number | 'all' | null;
 export default function SmartHistoryPage() {
   const { data: disks, isLoading }  = useDisks();
   const { data: thresholds }        = useAlertThresholds();
+  const [searchParams]              = useSearchParams();
 
-  const [selectedDriveId, setSelectedDriveId] = useState<DriveSelection>('all');
+  const initialDriveId = searchParams.get('driveId');
+  const [selectedDriveId, setSelectedDriveId] = useState<DriveSelection>(
+    initialDriveId ? parseInt(initialDriveId, 10) : 'all',
+  );
   const [selectedAttr, setSelectedAttr]       = useState('temperature');
   const [timeRange, setTimeRange]             = useState('-7d');
 

@@ -234,6 +234,18 @@ export default function DriveDetailPage() {
           ) : (
             <>
               {/* Key metrics */}
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-gray-500">Current snapshot</p>
+                <Link
+                  to={`/smart?driveId=${driveId}`}
+                  className="flex items-center gap-1.5 text-xs text-accent hover:text-accent/80 transition-colors"
+                >
+                  View SMART history
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </Link>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 {[
                   { label: 'Temperature',          value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
