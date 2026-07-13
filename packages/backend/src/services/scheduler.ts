@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { benchmarkSchedules, drives } from '../db/schema.js';
 import { createRun, executeBenchmark } from './benchmarkEngine.js';
+import { getActiveBenchmark } from './benchmarkLock.js';
 import { notifyBenchmarkComplete } from './notifications/notificationService.js';
 import { config } from '../config.js';
 
@@ -23,6 +24,17 @@ async function runSchedule(scheduleId: number, driveId: number | null, numPoints
   const scheduleLabel = sched?.label ?? null;
 
   for (const { driveId: did } of targetDrives) {
+    // The loop awaits each run, so the lock is free between iterations; it can
+    // only be held here by a manual run started mid-sweep. Skip rather than
+    // create a run row that executeBenchmark would immediately mark failed.
+    const active = getActiveBenchmark();
+    if (active) {
+      console.warn(
+        `[scheduler] Skipping scheduled benchmark for drive ${did}: ` +
+        `run ${active.runId} is already in progress (drive ${active.driveId})`,
+      );
+      continue;
+    }
     try {
       const runId = await createRun(did, numPoints, 'scheduled');
       await executeBenchmark(runId);

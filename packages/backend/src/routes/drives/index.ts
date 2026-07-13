@@ -5,6 +5,7 @@ import { drives, benchmarkRuns, smartCache as smartCacheTable, driveDisplayPrefs
 import { scanDisks, registerDrives, getDriveSummaries } from '../../services/diskDiscovery.js';
 import { getSmartReadingFromCache, getSmartHistory } from '../../services/smartService.js';
 import { createRun, executeBenchmark, getRunDetail, getDriveSeries, deleteRun, purgeAllRuns } from '../../services/benchmarkEngine.js';
+import { getActiveBenchmark } from '../../services/benchmarkLock.js';
 import { config } from '../../config.js';
 import type {
   Drive, DriveSummary, SmartReading, BenchmarkRun, BenchmarkRunDetail, BenchmarkSeries,
@@ -107,6 +108,15 @@ export async function driveRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
     const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
     if (!driveRow) return reply.status(404).send({ error: 'Drive not found' } as any);
+
+    // Refuse early while another benchmark holds the global lock — avoids
+    // creating a run row that executeBenchmark would immediately mark failed.
+    const active = getActiveBenchmark();
+    if (active) {
+      return reply.status(409).send({
+        error: `Benchmark run ${active.runId} is already in progress (drive ${active.driveId})`,
+      });
+    }
 
     const runId = await createRun(driveId, numPoints, 'manual');
 

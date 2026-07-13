@@ -11,6 +11,8 @@ import BenchmarkProgressBar from '../../components/ui/BenchmarkProgressBar';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { Toast } from '../../components/ui/Toast';
+import { useToast } from '@/hooks/useToast.ts';
 import { DriveAlertSettings } from './DriveAlertSettings';
 import { formatBytes } from '@/lib/formatBytes.ts';
 import type { SmartAttribute } from '@sectorama/shared';
@@ -151,6 +153,7 @@ export default function DriveDetailPage() {
   const deleteRun       = useDeleteBenchmarkRun(driveId);
   const purgeAll        = usePurgeBenchmarks(driveId);
   const benchmarkProgress = useBenchmarkProgress(activeRunId);
+  const { toast, showToast, dismissToast } = useToast();
 
   if (isLoading) return <FullPageSpinner />;
   if (isError || !drive) return <ErrorMessage message="Drive not found." retry={refetch} />;
@@ -192,8 +195,15 @@ export default function DriveDetailPage() {
   ) : [];
 
   async function handleRunBenchmark() {
-    const result = await runBenchmark.mutateAsync(undefined);
-    setSelectedRunId(result.runId);
+    try {
+      const result = await runBenchmark.mutateAsync(undefined);
+      setSelectedRunId(result.runId);
+    } catch (err) {
+      // 409 when another benchmark holds the global lock; server sends { error }.
+      const msg = (err as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error ?? 'Failed to start benchmark';
+      showToast({ level: 'error', title: 'Benchmark not started', body: msg });
+    }
   }
 
   function handleDeleteRun(runId: number) {
@@ -221,6 +231,8 @@ export default function DriveDetailPage() {
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {toast && <Toast msg={toast} onDismiss={dismissToast} />}
+
       {/* Confirm modal */}
       {confirmDialog && (
         <ConfirmModal

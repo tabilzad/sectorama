@@ -13,8 +13,10 @@ import {
   mockProfileResults,
 } from './benchmarkProfiles.js';
 import { computeDiskRegion } from './diskRegion.js';
+import { acquireBenchmarkLock, releaseBenchmarkLock } from './benchmarkLock.js';
 import { getCommunitySharingEnabled } from './settingsService.js';
 import { getSmartCacheRow, getLatestSmartAttributes } from './smartService.js';
+import type { BenchmarkRunRow, DriveRow } from '../db/schema.js';
 import { gatherEnvironmentInfo } from './environmentInfo.js';
 import { buildCommunityReport } from './communityReport.js';
 import { createUploader } from './communityUploader.js';
@@ -249,6 +251,34 @@ export async function executeBenchmark(runId: number): Promise<void> {
 
   const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, runRow.driveId) });
   if (!driveRow) throw new Error(`Drive ${runRow.driveId} not found`);
+
+  // One benchmark at a time, node-wide — see benchmarkLock.ts for the rationale.
+  // A refused run is marked failed immediately so it never sits in 'pending'.
+  try {
+    acquireBenchmarkLock(runId, runRow.driveId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await db.update(benchmarkRuns)
+      .set({ status: 'failed', errorMessage: msg, completedAt: new Date().toISOString() })
+      .where(eq(benchmarkRuns.runId, runId));
+    broadcast({ type: 'benchmark_failed', runId, error: msg });
+    throw err;
+  }
+
+  try {
+    await executeBenchmarkLocked(runId, runRow, driveRow);
+  } finally {
+    releaseBenchmarkLock(runId);
+  }
+}
+
+/** Benchmark run body. The caller (executeBenchmark) holds the global lock. */
+async function executeBenchmarkLocked(
+  runId:    number,
+  runRow:   BenchmarkRunRow,
+  driveRow: DriveRow,
+): Promise<void> {
+  const db = getDb();
 
   const numPoints = runRow.numPoints ?? config.benchmark.numPoints;
 
