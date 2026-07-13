@@ -33,12 +33,20 @@
 ## Features
 
 - **Drive discovery** — auto-detects all block devices via `smartctl --scan`
-- **Position curve** — measures sequential read speed at evenly-spaced byte offsets to visualise the speed falloff from
-  outer to inner tracks
-- **fio profiles** — three standard benchmark profiles per run:
-    - Sequential read (1 MiB blocks, 30 s)
-    - 4 K random read (8 parallel jobs, 30 s)
-    - Idle latency (P50 / P95 / P99 / P99.9 ns)
+- **Position curve** — measures sequential read speed at evenly-spaced byte offsets to visualise the speed falloff
+  from outer to inner tracks. Sample parameters are drive-type aware: QD 32 / 256 MiB per sample on NVMe,
+  QD 1 / 128 MiB on HDD and SATA SSD
+- **fio profiles** — four uniform profiles per run, identical parameters on every drive type so results are
+  directly comparable across devices:
+    - Sequential read, 1 MiB blocks, QD 1 — single-stream throughput (typical NAS workload)
+    - Sequential read, 1 MiB blocks, QD 32 — deep-queue throughput (saturates NVMe bandwidth)
+    - Random read, 4 KiB blocks, QD 1 — latency-sensitive baseline
+    - Random read, 4 KiB blocks, QD 32 — peak IOPS (matches CrystalDiskMark Q32T1)
+
+  Each profile runs for 30 s (plus 5 s ramp) with `O_DIRECT` and a fixed random seed, pinned to a
+  middle-of-disk region to eliminate outer-track bias. Latency percentiles (P50 / P95 / P99 / P99.9) are
+  recorded per profile. All benchmark I/O is strictly read-only, and only one benchmark runs at a time
+  so concurrent jobs can never distort each other's results
 - **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time
 - **Benchmark schedules** — cron-based per-drive or global schedules
 - **Notifications** — alert channels (Webhook, Slack) with per-alert-type subscriptions; transition-only firing (once on
@@ -142,10 +150,11 @@ Sectorama can push alerts to external services when a drive's health or temperat
 
 ### Alert types
 
-| Type          | Fires when…                                                              |
-|---------------|--------------------------------------------------------------------------|
-| `smart_error` | SMART self-assessment transitions from passing → failing                 |
-| `temperature` | Drive temperature transitions from at-or-below the threshold to above it |
+| Type                 | Fires when…                                                              |
+|----------------------|--------------------------------------------------------------------------|
+| `smart_error`        | SMART self-assessment transitions from passing → failing                 |
+| `temperature`        | Drive temperature transitions from at-or-below the threshold to above it |
+| `benchmark_complete` | A scheduled benchmark run finishes (completed or failed), with a summary report |
 
 Alerts are **transition-only**: they fire once when a condition first occurs and are silent until the condition clears
 and re-triggers. This prevents alert storms on every poll.
