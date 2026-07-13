@@ -103,7 +103,8 @@ function formatNvmeAttrValue(name: string, value: number): string {
     case 'Data Units Read':
     case 'Data Units Written': {
       const bytes = value * 512_000;
-      if (bytes < 1e9)  return `${(bytes / 1e6).toFixed(1)} GB`;
+      if (bytes < 1e9)  return `${(bytes / 1e6).toFixed(1)} MB`;
+      if (bytes < 1e12) return `${(bytes / 1e9).toFixed(1)} GB`;
       return `${(bytes / 1e12).toFixed(2)} TB`;
     }
     case 'Host Read Commands':
