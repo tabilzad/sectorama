@@ -32,6 +32,9 @@ interface SmartctlXallResult {
   temperature?: { current?: number };
   power_on_time?: { hours?: number };
   power_cycle_count?: number;
+  // Top-level NVMe endurance (same semantic as nvme_smart_health_information_log.percentage_used,
+  // but present on some controllers that omit it from the health log)
+  endurance_used?: { current_percent?: number };
   // SATA/SAS attributes
   ata_smart_attributes?: { table?: AtaAttribute[] };
   // NVMe health log
@@ -46,6 +49,13 @@ interface SmartctlXallResult {
     percentage_used?: number;
     controller_busy_time?: number;
     unsafe_shutdowns?: number;
+    critical_warning?: number;
+    data_units_read?: number;
+    data_units_written?: number;
+    host_reads?: number;
+    host_writes?: number;
+    warning_temp_time?: number;
+    critical_comp_time?: number;
   };
 }
 
@@ -99,17 +109,48 @@ function parseAtaAttributes(table: AtaAttribute[]): SmartAttribute[] {
   }));
 }
 
-function parseNvmeAttributes(log: NonNullable<SmartctlXallResult['nvme_smart_health_information_log']>): SmartAttribute[] {
+function parseNvmeAttributes(
+  log: NonNullable<SmartctlXallResult['nvme_smart_health_information_log']>,
+  endurancePercent?: number,
+): SmartAttribute[] {
   const attrs: SmartAttribute[] = [];
-  const add = (id: number, name: string, value: number) =>
-    attrs.push({ attrId: id, name, value, worst: value, threshold: 0, rawValue: value, failing: false });
+  const spareThreshold = log.available_spare_threshold ?? 10;
 
-  if (log.available_spare !== undefined)     add(1, 'Available Spare %',        log.available_spare);
-  if (log.percentage_used !== undefined)     add(2, 'Percentage Used',          log.percentage_used);
-  if (log.media_errors !== undefined)        add(3, 'Media Errors',             log.media_errors);
-  if (log.num_err_log_entries !== undefined) add(4, 'Error Log Entries',        log.num_err_log_entries);
-  if (log.unsafe_shutdowns !== undefined)    add(5, 'Unsafe Shutdowns',         log.unsafe_shutdowns);
-  if (log.controller_busy_time !== undefined) add(6, 'Controller Busy Time (min)', log.controller_busy_time);
+  function add(id: number, name: string, value: number, failing = false, threshold = 0) {
+    attrs.push({ attrId: id, name, value, worst: value, threshold, rawValue: value, failing });
+  }
+
+  // Ordered to match nvme_smart_health_information_log field order for readability
+  if (log.critical_warning !== undefined)
+    add(1,  'Critical Warning',            log.critical_warning,         log.critical_warning !== 0);
+  if (log.available_spare !== undefined)
+    add(2,  'Available Spare %',           log.available_spare,          log.available_spare < spareThreshold, spareThreshold);
+  // percentage_used and endurance_used.current_percent carry the same value on most controllers;
+  // use the health-log field first, fall back to the top-level endurance_used.
+  const pctUsed = log.percentage_used ?? endurancePercent;
+  if (pctUsed !== undefined)
+    add(3,  'Percentage Used',             pctUsed,                      pctUsed >= 100);
+  if (log.data_units_read !== undefined)
+    add(4,  'Data Units Read',             log.data_units_read);
+  if (log.data_units_written !== undefined)
+    add(5,  'Data Units Written',          log.data_units_written);
+  if (log.host_reads !== undefined)
+    add(6,  'Host Read Commands',          log.host_reads);
+  if (log.host_writes !== undefined)
+    add(7,  'Host Write Commands',         log.host_writes);
+  if (log.media_errors !== undefined)
+    add(8,  'Media Errors',               log.media_errors,             log.media_errors > 0);
+  if (log.num_err_log_entries !== undefined)
+    add(9,  'Error Log Entries',           log.num_err_log_entries);
+  if (log.unsafe_shutdowns !== undefined)
+    add(10, 'Unsafe Shutdowns',            log.unsafe_shutdowns);
+  if (log.controller_busy_time !== undefined)
+    add(11, 'Controller Busy Time (min)',  log.controller_busy_time);
+  if (log.warning_temp_time !== undefined)
+    add(12, 'Warning Temp Time (min)',     log.warning_temp_time,        log.warning_temp_time > 0);
+  if (log.critical_comp_time !== undefined)
+    add(13, 'Critical Comp Time (min)',    log.critical_comp_time,       log.critical_comp_time > 0);
+
   return attrs;
 }
 
@@ -155,7 +196,7 @@ async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<
     pendingSectors      = attributes.find(a => a.attrId === 197)?.rawValue ?? null;
     uncorrectableErrors = attributes.find(a => a.attrId === 198)?.rawValue ?? null;
   } else if (nvmeLog) {
-    attributes          = parseNvmeAttributes(nvmeLog);
+    attributes          = parseNvmeAttributes(nvmeLog, result.endurance_used?.current_percent);
     reallocatedSectors  = nvmeLog.media_errors ?? null;
     uncorrectableErrors = nvmeLog.num_err_log_entries ?? null;
   }

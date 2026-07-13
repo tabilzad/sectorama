@@ -95,6 +95,36 @@ function formatPowerOnTime(hours: number | null | undefined): string {
   return `${years.toFixed(1)} yr`;
 }
 
+// ─── NVMe helpers ────────────────────────────────────────────────────────────
+
+// NVMe data units: 1 unit = 1000 × 512 bytes = 512 000 bytes ≈ 500 KB
+function formatNvmeAttrValue(name: string, value: number): string {
+  switch (name) {
+    case 'Data Units Read':
+    case 'Data Units Written': {
+      const bytes = value * 512_000;
+      if (bytes < 1e9)  return `${(bytes / 1e6).toFixed(1)} GB`;
+      return `${(bytes / 1e12).toFixed(2)} TB`;
+    }
+    case 'Host Read Commands':
+    case 'Host Write Commands':
+      if (value >= 1e9) return `${(value / 1e9).toFixed(2)} B`;
+      if (value >= 1e6) return `${(value / 1e6).toFixed(1)} M`;
+      return value.toLocaleString();
+    case 'Controller Busy Time (min)': {
+      const h = Math.floor(value / 60);
+      const m = value % 60;
+      return h > 0 ? `${h.toLocaleString()} h ${m} min` : `${value} min`;
+    }
+    case 'Critical Warning':
+      return value === 0 ? '0 (none)' : `0x${value.toString(16).toUpperCase()}`;
+    default:
+      return value.toLocaleString();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Tab = 'smart' | 'benchmarks';
 
 export default function DriveDetailPage() {
@@ -128,6 +158,37 @@ export default function DriveDetailPage() {
     smart?.healthPassed === false ? 'failed'
     : smart?.healthPassed === true  ? 'ok'
     : 'unknown';
+
+  const isNvme = drive.type === 'NVMe';
+
+  // Pre-lookup frequently used NVMe attributes (safe when smart is undefined)
+  const nvmeSparePct  = smart?.attributes.find(a => a.name === 'Available Spare %');
+  const nvmePctUsed   = smart?.attributes.find(a => a.name === 'Percentage Used');
+  const nvmeMediaErr  = smart?.attributes.find(a => a.name === 'Media Errors');
+  const nvmeErrLog    = smart?.attributes.find(a => a.name === 'Error Log Entries');
+  const nvmeCritWarn  = smart?.attributes.find(a => a.name === 'Critical Warning');
+
+  // Key-metric cards vary by protocol
+  const smartKeyMetrics: Array<{ label: string; value: string; warn?: boolean }> = smart ? (
+    isNvme ? [
+      { label: 'Temperature',       value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
+      { label: 'Powered On',        value: formatPowerOnTime(smart.powerOnHours) },
+      { label: 'Power Cycles',      value: smart.powerCycleCount?.toLocaleString() ?? '—' },
+      { label: 'Available Spare',   value: nvmeSparePct  != null ? `${nvmeSparePct.value}%`  : '—', warn: nvmeSparePct?.failing },
+      { label: 'Endurance Used',    value: nvmePctUsed   != null ? `${nvmePctUsed.value}%`   : '—', warn: nvmePctUsed?.failing },
+      { label: 'Media Errors',      value: nvmeMediaErr?.value.toLocaleString() ?? '—',              warn: nvmeMediaErr?.failing },
+      { label: 'Error Log Entries', value: nvmeErrLog?.value.toLocaleString()   ?? '—' },
+      { label: 'Last Updated',      value: new Date(smart.timestamp).toLocaleString() },
+    ] : [
+      { label: 'Temperature',          value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
+      { label: 'Powered On',           value: formatPowerOnTime(smart.powerOnHours) },
+      { label: 'Power Cycle Count',    value: smart.powerCycleCount?.toLocaleString() ?? '—' },
+      { label: 'Reallocated Sectors',  value: smart.reallocatedSectors?.toLocaleString() ?? '—',  warn: (smart.reallocatedSectors ?? 0) > 0 },
+      { label: 'Pending Sectors',      value: smart.pendingSectors?.toLocaleString()     ?? '—',  warn: (smart.pendingSectors ?? 0) > 0 },
+      { label: 'Uncorrectable Errors', value: smart.uncorrectableErrors?.toLocaleString() ?? '—', warn: (smart.uncorrectableErrors ?? 0) > 0 },
+      { label: 'Last Updated',         value: new Date(smart.timestamp).toLocaleString() },
+    ]
+  ) : [];
 
   async function handleRunBenchmark() {
     const result = await runBenchmark.mutateAsync(undefined);
@@ -233,9 +294,18 @@ export default function DriveDetailPage() {
             <p className="text-gray-500 text-center py-12">No SMART data available yet.</p>
           ) : (
             <>
-              {/* Key metrics */}
+              {/* Header row — protocol badge + history link */}
               <div className="flex items-center justify-between mb-4">
-                <p className="text-xs text-gray-500">Current snapshot</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-500">Current snapshot</p>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                    isNvme
+                      ? 'border-accent/40 text-accent bg-accent/10'
+                      : 'border-surface-300 text-gray-500 bg-surface-200'
+                  }`}>
+                    {isNvme ? 'NVMe' : drive.type}
+                  </span>
+                </div>
                 <Link
                   to={`/smart?driveId=${driveId}`}
                   className="flex items-center gap-1.5 text-xs text-accent hover:text-accent/80 transition-colors"
@@ -246,55 +316,94 @@ export default function DriveDetailPage() {
                   </svg>
                 </Link>
               </div>
+
+              {/* Critical Warning banner — NVMe only, shown when non-zero */}
+              {isNvme && nvmeCritWarn?.failing && (
+                <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/30 flex items-start gap-2">
+                  <svg className="w-4 h-4 text-danger mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-danger font-semibold">Critical Warning active (0x{nvmeCritWarn.value.toString(16).toUpperCase()})</p>
+                    <p className="text-xs text-danger/80 mt-0.5">The drive controller has flagged a critical condition. Check available spare, temperature, and media health.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Key metrics grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                {[
-                  { label: 'Temperature',          value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
-                  { label: 'Powered On',           value: formatPowerOnTime(smart.powerOnHours) },
-                  { label: 'Power Cycle Count',    value: smart.powerCycleCount?.toLocaleString() ?? '—' },
-                  { label: 'Reallocated Sectors',  value: smart.reallocatedSectors?.toLocaleString() ?? '—' },
-                  { label: 'Pending Sectors',      value: smart.pendingSectors?.toLocaleString() ?? '—' },
-                  { label: 'Uncorrectable Errors', value: smart.uncorrectableErrors?.toLocaleString() ?? '—' },
-                  { label: 'Last Updated',         value: new Date(smart.timestamp).toLocaleString() },
-                ].map(({ label, value }) => (
-                  <div key={label} className="card">
+                {smartKeyMetrics.map(({ label, value, warn }) => (
+                  <div key={label} className={`card ${warn ? 'border-danger/40' : ''}`}>
                     <p className="text-xs text-gray-500 mb-1">{label}</p>
-                    <p className="text-xl font-bold text-white tabular-nums">{value}</p>
+                    <p className={`text-xl font-bold tabular-nums ${warn ? 'text-danger' : 'text-white'}`}>{value}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Attribute table */}
+              {/* Attribute table — NVMe and ATA/SATA use different column layouts */}
               {smart.attributes.length > 0 && (
-                <div className="card p-0 overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-surface-300">
-                        {['ID', 'Attribute', 'Value', 'Worst', 'Threshold', 'Raw', 'Status'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {smart.attributes.map((attr: SmartAttribute) => (
-                        <tr key={attr.attrId} className={`border-b border-surface-300/50 hover:bg-surface-200 ${attr.failing ? 'bg-danger/5' : ''}`}>
-                          <td className="px-4 py-2 text-gray-500 font-mono text-xs">{attr.attrId}</td>
-                          <td className="px-4 py-2 text-gray-300">{attr.name}</td>
-                          <td className="px-4 py-2 tabular-nums text-gray-200">{attr.value}</td>
-                          <td className="px-4 py-2 tabular-nums text-gray-400">{attr.worst}</td>
-                          <td className="px-4 py-2 tabular-nums text-gray-400">{attr.threshold}</td>
-                          <td className="px-4 py-2 tabular-nums text-gray-500 font-mono text-xs">{attr.rawValue}</td>
-                          <td className="px-4 py-2">
-                            {attr.failing ? (
-                              <span className="text-danger text-xs font-medium">FAILING</span>
-                            ) : (
-                              <span className="text-brand text-xs">OK</span>
-                            )}
-                          </td>
+                isNvme ? (
+                  /* NVMe: no ATA-style value/worst/threshold/raw columns (they're meaningless) */
+                  <div className="card p-0 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-surface-300">
+                          {['Attribute', 'Value', 'Threshold', 'Status'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {smart.attributes.map((attr: SmartAttribute) => (
+                          <tr key={attr.attrId} className={`border-b border-surface-300/50 hover:bg-surface-200 ${attr.failing ? 'bg-danger/5' : ''}`}>
+                            <td className="px-4 py-2 text-gray-300">{attr.name}</td>
+                            <td className="px-4 py-2 tabular-nums text-gray-200 font-mono text-xs">
+                              {formatNvmeAttrValue(attr.name, attr.value)}
+                            </td>
+                            <td className="px-4 py-2 tabular-nums text-gray-500 text-xs">
+                              {attr.threshold > 0 ? `${attr.threshold}${attr.name === 'Available Spare %' ? '%' : ''}` : '—'}
+                            </td>
+                            <td className="px-4 py-2">
+                              {attr.failing
+                                ? <span className="text-danger text-xs font-medium">FAILING</span>
+                                : <span className="text-brand text-xs">OK</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  /* ATA/SATA: full value / worst / threshold / raw columns */
+                  <div className="card p-0 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-surface-300">
+                          {['ID', 'Attribute', 'Value', 'Worst', 'Threshold', 'Raw', 'Status'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {smart.attributes.map((attr: SmartAttribute) => (
+                          <tr key={attr.attrId} className={`border-b border-surface-300/50 hover:bg-surface-200 ${attr.failing ? 'bg-danger/5' : ''}`}>
+                            <td className="px-4 py-2 text-gray-500 font-mono text-xs">{attr.attrId}</td>
+                            <td className="px-4 py-2 text-gray-300">{attr.name}</td>
+                            <td className="px-4 py-2 tabular-nums text-gray-200">{attr.value}</td>
+                            <td className="px-4 py-2 tabular-nums text-gray-400">{attr.worst}</td>
+                            <td className="px-4 py-2 tabular-nums text-gray-400">{attr.threshold}</td>
+                            <td className="px-4 py-2 tabular-nums text-gray-500 font-mono text-xs">{attr.rawValue}</td>
+                            <td className="px-4 py-2">
+                              {attr.failing
+                                ? <span className="text-danger text-xs font-medium">FAILING</span>
+                                : <span className="text-brand text-xs">OK</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               )}
             </>
           )}

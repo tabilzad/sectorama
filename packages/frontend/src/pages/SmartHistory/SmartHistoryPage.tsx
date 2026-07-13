@@ -18,17 +18,45 @@ const TIME_RANGES = [
   { label: '90 days',  from: '-90d' },
 ];
 
-const COMMON_ATTRS = [
-  'temperature',
-  'Reallocated_Sector_Ct',
-  'Current_Pending_Sector',
-  'Offline_Uncorrectable',
-  'UDMA_CRC_Error_Count',
-  'Power_On_Hours',
-  'Power_Cycle_Count',
-  'Available Spare %',
-  'Media Errors',
+interface AttrOption { label: string; value: string; }
+
+/** Attributes available for any drive type (stored on smart_readings measurement). */
+const COMMON_ATTRS: AttrOption[] = [
+  { label: 'Temperature',    value: 'temperature' },
+  { label: 'Power On Hours', value: 'Power_On_Hours' },
+  { label: 'Power Cycles',   value: 'Power_Cycle_Count' },
 ];
+
+/** ATA/SATA-specific attributes (stored on smart_attributes measurement by attr_name tag). */
+const ATA_ATTRS: AttrOption[] = [
+  ...COMMON_ATTRS,
+  { label: 'Reallocated Sectors',  value: 'Reallocated_Sector_Ct' },
+  { label: 'Pending Sectors',      value: 'Current_Pending_Sector' },
+  { label: 'Uncorrectable Errors', value: 'Offline_Uncorrectable' },
+  { label: 'CRC Errors',           value: 'UDMA_CRC_Error_Count' },
+];
+
+/** NVMe-specific attributes (stored on smart_attributes measurement by attr_name tag). */
+const NVME_ATTRS: AttrOption[] = [
+  ...COMMON_ATTRS,
+  { label: 'Available Spare %',         value: 'Available Spare %' },
+  { label: 'Endurance Used %',          value: 'Percentage Used' },
+  { label: 'Media Errors',              value: 'Media Errors' },
+  { label: 'Error Log Entries',         value: 'Error Log Entries' },
+  { label: 'Unsafe Shutdowns',          value: 'Unsafe Shutdowns' },
+  { label: 'Critical Warning',          value: 'Critical Warning' },
+  { label: 'Data Units Written',        value: 'Data Units Written' },
+  { label: 'Data Units Read',           value: 'Data Units Read' },
+  { label: 'Warning Temp Time (min)',   value: 'Warning Temp Time (min)' },
+  { label: 'Critical Comp Time (min)',  value: 'Critical Comp Time (min)' },
+  { label: 'Controller Busy Time (min)',value: 'Controller Busy Time (min)' },
+];
+
+function attrsForDrive(driveId: number | 'all' | null, disks: DriveSummary[] | undefined): AttrOption[] {
+  if (driveId === 'all' || driveId === null) return COMMON_ATTRS;
+  const drive = disks?.find(d => d.driveId === driveId);
+  return drive?.type === 'NVMe' ? NVME_ATTRS : ATA_ATTRS;
+}
 
 function formatAttrLabel(attr: string): string {
   return attr.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -162,11 +190,23 @@ export default function SmartHistoryPage() {
     ? resolveZoneConfig(singleDriveId, thresholds)
     : undefined;
 
+  // Available attributes depend on the selected drive's protocol
+  const availableAttrs = attrsForDrive(selectedDriveId, disks);
+
   function handleDriveChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value;
-    if (!v)         setSelectedDriveId(null);
-    else if (v === 'all') setSelectedDriveId('all');
-    else            setSelectedDriveId(parseInt(v, 10));
+    let newId: DriveSelection;
+    if (!v)           newId = null;
+    else if (v === 'all') newId = 'all';
+    else              newId = parseInt(v, 10);
+
+    setSelectedDriveId(newId);
+
+    // Reset the attribute selection if it isn't valid for the new drive type
+    const newAttrs = attrsForDrive(newId, disks);
+    if (!newAttrs.some(a => a.value === selectedAttr)) {
+      setSelectedAttr(newAttrs[0]?.value ?? 'temperature');
+    }
   }
 
   if (isLoading) return <FullPageSpinner />;
@@ -201,7 +241,7 @@ export default function SmartHistoryPage() {
             ))}
           </FormSelect>
 
-          {/* Attribute selector */}
+          {/* Attribute selector — filtered to the selected drive's protocol */}
           <FormSelect
             label="Attribute"
             value={selectedAttr}
@@ -209,8 +249,8 @@ export default function SmartHistoryPage() {
             className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
                        text-sm text-gray-200 focus:outline-none focus:border-accent"
           >
-            {COMMON_ATTRS.map(a => (
-              <option key={a} value={a}>{formatAttrLabel(a)}</option>
+            {availableAttrs.map(a => (
+              <option key={a.value} value={a.value}>{a.label}</option>
             ))}
           </FormSelect>
 
