@@ -218,6 +218,31 @@ async function fetchRunProfiles(
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Mark runs left in 'pending' or 'running' by a previous process as failed.
+ * Call once on startup, before routes and schedulers can start new runs.
+ * Without this, a restart mid-benchmark strands the run in 'running' forever —
+ * and deleteRun refuses to touch running runs, so the user can't clean it up.
+ */
+export async function recoverOrphanedRuns(): Promise<void> {
+  const db = getDb();
+  const orphaned = await db.update(benchmarkRuns)
+    .set({
+      status:       'failed',
+      errorMessage: 'Interrupted by application restart',
+      completedAt:  new Date().toISOString(),
+    })
+    .where(inArray(benchmarkRuns.status, ['pending', 'running']))
+    .returning({ runId: benchmarkRuns.runId });
+
+  if (orphaned.length > 0) {
+    console.warn(
+      `[benchmarkEngine] Marked ${orphaned.length} orphaned run(s) as failed: ` +
+      orphaned.map(r => r.runId).join(', '),
+    );
+  }
+}
+
 /** Create a new BenchmarkRun row and return its ID. */
 export async function createRun(
   driveId:     number,

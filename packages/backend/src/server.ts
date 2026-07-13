@@ -11,6 +11,7 @@ import { initVapid } from './services/pushService.js';
 import { registerLiveFeed, initSmartReplay } from './ws/liveFeed.js';
 import { initScheduler, initSmartPoller } from './services/scheduler.js';
 import { scanDisks, registerDrives } from './services/diskDiscovery.js';
+import { recoverOrphanedRuns } from './services/benchmarkEngine.js';
 import { refreshAllSmart, getAllCachedSmartEvents } from './services/smartService.js';
 
 async function buildApp() {
@@ -88,6 +89,10 @@ async function main() {
   console.log(`[sectorama] Initializing SQLite at ${config.sqlite.path}...`);
   initDb();
   console.log('[sectorama] SQLite ready');
+
+  // Fail any runs stranded in 'pending'/'running' by a previous process —
+  // must happen before routes and schedulers can start new runs.
+  await recoverOrphanedRuns();
 
   // ── Initialize VAPID keys for Web Push ────────────────────────────────────
   initVapid();
