@@ -162,7 +162,36 @@ export function parseFioOutput(raw: unknown): FioResult {
   };
 }
 
-/** Spawn fio, collect JSON output, return a parsed FioResult. */
+// ─── Watchdog timeout ─────────────────────────────────────────────────────────
+
+/** Fixed grace on top of the expected job duration (fio startup, JSON dump, slow drives). */
+const FIO_GRACE_SECS = 180;
+
+/**
+ * Minimum throughput a one-shot (size-bounded) job must sustain before we
+ * declare the drive unresponsive. A drive averaging below ~4 MiB/s on a
+ * sequential read is failing — its benchmark numbers would be meaningless,
+ * so timing out and failing the run is the correct outcome.
+ */
+const MIN_ONESHOT_BPS = 4 * 1_048_576;
+
+function computeTimeoutSecs(params: FioJobParams): number {
+  if (params.runtimeSecs > 0) {
+    return params.runtimeSecs + params.rampTimeSecs + FIO_GRACE_SECS;
+  }
+  const sizeSecs = params.sizeBytes ? Math.ceil(params.sizeBytes / MIN_ONESHOT_BPS) : 0;
+  return sizeSecs + FIO_GRACE_SECS;
+}
+
+/**
+ * Spawn fio, collect JSON output, return a parsed FioResult.
+ *
+ * A watchdog rejects the promise if fio outlives its expected duration plus
+ * grace — without it, fio stuck in kernel D-state on an unresponsive drive
+ * would hang the run forever and hold the global benchmark lock until restart.
+ * The kill is best-effort: a D-state process can survive even SIGKILL until
+ * its I/O completes, so the promise must settle regardless.
+ */
 export async function runFioJob(params: FioJobParams): Promise<FioResult> {
   return new Promise((resolve, reject) => {
     const args = buildFioArgs(params);
@@ -170,11 +199,24 @@ export async function runFioJob(params: FioJobParams): Promise<FioResult> {
 
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+
+    const timeoutSecs = computeTimeoutSecs(params);
+    const watchdog = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(
+        `fio timed out after ${timeoutSecs}s on ${params.devicePath} — drive may be unresponsive`,
+      ));
+      proc.kill('SIGTERM');
+      setTimeout(() => proc.kill('SIGKILL'), 5_000).unref();
+    }, timeoutSecs * 1000);
 
     proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
     proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
 
     proc.on('close', code => {
+      clearTimeout(watchdog);
+      if (timedOut) return;   // promise already rejected by the watchdog
       // fio sometimes writes warning/error lines to stdout before the JSON blob.
       // Find the first '{' to skip any non-JSON prefix.
       const jsonStart = stdout.indexOf('{');
@@ -194,6 +236,9 @@ export async function runFioJob(params: FioJobParams): Promise<FioResult> {
       }
     });
 
-    proc.on('error', reject);
+    proc.on('error', err => {
+      clearTimeout(watchdog);
+      if (!timedOut) reject(err);
+    });
   });
 }
