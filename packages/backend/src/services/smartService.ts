@@ -117,8 +117,11 @@ function parseNvmeAttributes(
   const attrs: SmartAttribute[] = [];
   const spareThreshold = log.available_spare_threshold ?? 10;
 
-  function add(id: number, name: string, value: number, failing = false, threshold = 0) {
-    attrs.push({ attrId: id, name, value, worst: value, threshold, rawValue: value, failing });
+  // warn is the advisory tier (amber in the UI): attention-worthy conditions
+  // that are not device-declared failures. The 90 % endurance threshold
+  // follows ecosystem precedent (canonical hardware-observer warns at 80–90).
+  function add(id: number, name: string, value: number, failing = false, threshold = 0, warn = false) {
+    attrs.push({ attrId: id, name, value, worst: value, threshold, rawValue: value, failing, warn });
   }
 
   // `failing` is reserved for the spec-defined failure signals — the same
@@ -139,7 +142,7 @@ function parseNvmeAttributes(
   // use the health-log field first, fall back to the top-level endurance_used.
   const pctUsed = log.percentage_used ?? endurancePercent;
   if (pctUsed !== undefined)
-    add(3,  'Percentage Used',             pctUsed);
+    add(3,  'Percentage Used',             pctUsed,                      false, 0, pctUsed >= 90);
   if (log.data_units_read !== undefined)
     add(4,  'Data Units Read',             log.data_units_read);
   if (log.data_units_written !== undefined)
@@ -149,7 +152,7 @@ function parseNvmeAttributes(
   if (log.host_writes !== undefined)
     add(7,  'Host Write Commands',         log.host_writes);
   if (log.media_errors !== undefined)
-    add(8,  'Media Errors',               log.media_errors);
+    add(8,  'Media Errors',               log.media_errors,             false, 0, log.media_errors > 0);
   if (log.num_err_log_entries !== undefined)
     add(9,  'Error Log Entries',           log.num_err_log_entries);
   if (log.unsafe_shutdowns !== undefined)
@@ -159,7 +162,7 @@ function parseNvmeAttributes(
   if (log.warning_temp_time !== undefined)
     add(12, 'Warning Temp Time (min)',     log.warning_temp_time);
   if (log.critical_comp_time !== undefined)
-    add(13, 'Critical Comp Time (min)',    log.critical_comp_time);
+    add(13, 'Critical Comp Time (min)',    log.critical_comp_time,      false, 0, log.critical_comp_time > 0);
 
   return attrs;
 }

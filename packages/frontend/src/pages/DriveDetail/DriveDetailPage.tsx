@@ -121,6 +121,9 @@ function formatNvmeAttrValue(name: string, value: number): string {
     }
     case 'Critical Warning':
       return value === 0 ? '0 (none)' : `0x${value.toString(16).toUpperCase()}`;
+    // NVMe spec: values above 254 are reported as 255, meaning "≥ 254 %".
+    case 'Percentage Used':
+      return value >= 255 ? '≥254%' : `${value}%`;
     default:
       return value.toLocaleString();
   }
@@ -172,14 +175,16 @@ export default function DriveDetailPage() {
   const nvmeErrLog    = smart?.attributes.find(a => a.name === 'Error Log Entries');
   const nvmeCritWarn  = smart?.attributes.find(a => a.name === 'Critical Warning');
 
-  // Key-metric cards vary by protocol
-  const smartKeyMetrics: Array<{ label: string; value: string; warn?: boolean }> = smart ? (
+  // Key-metric cards vary by protocol.
+  // warn = red (serious); caution = amber (advisory, e.g. endurance wear).
+  const smartKeyMetrics: Array<{ label: string; value: string; warn?: boolean; caution?: boolean }> = smart ? (
     isNvme ? [
       { label: 'Temperature',       value: smart.temperature != null ? `${smart.temperature}°C` : '—' },
       { label: 'Powered On',        value: formatPowerOnTime(smart.powerOnHours) },
       { label: 'Power Cycles',      value: smart.powerCycleCount?.toLocaleString() ?? '—' },
       { label: 'Available Spare',   value: nvmeSparePct  != null ? `${nvmeSparePct.value}%`  : '—', warn: nvmeSparePct?.failing },
-      { label: 'Endurance Used',    value: nvmePctUsed   != null ? `${nvmePctUsed.value}%`   : '—' },
+      { label: 'Endurance Used',    value: nvmePctUsed   != null ? formatNvmeAttrValue('Percentage Used', nvmePctUsed.value) : '—',
+        caution: (nvmePctUsed?.value ?? 0) >= 90 },
       { label: 'Media Errors',      value: nvmeMediaErr?.value.toLocaleString() ?? '—',              warn: (nvmeMediaErr?.value ?? 0) > 0 },
       { label: 'Error Log Entries', value: nvmeErrLog?.value.toLocaleString()   ?? '—' },
       { label: 'Last Updated',      value: new Date(smart.timestamp).toLocaleString() },
@@ -345,10 +350,10 @@ export default function DriveDetailPage() {
 
               {/* Key metrics grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                {smartKeyMetrics.map(({ label, value, warn }) => (
-                  <div key={label} className={`card ${warn ? 'border-danger/40' : ''}`}>
+                {smartKeyMetrics.map(({ label, value, warn, caution }) => (
+                  <div key={label} className={`card ${warn ? 'border-danger/40' : caution ? 'border-warn/40' : ''}`}>
                     <p className="text-xs text-gray-500 mb-1">{label}</p>
-                    <p className={`text-xl font-bold tabular-nums ${warn ? 'text-danger' : 'text-white'}`}>{value}</p>
+                    <p className={`text-xl font-bold tabular-nums ${warn ? 'text-danger' : caution ? 'text-warn' : 'text-white'}`}>{value}</p>
                   </div>
                 ))}
               </div>
@@ -368,7 +373,7 @@ export default function DriveDetailPage() {
                       </thead>
                       <tbody>
                         {smart.attributes.map((attr: SmartAttribute) => (
-                          <tr key={attr.attrId} className={`border-b border-surface-300/50 hover:bg-surface-200 ${attr.failing ? 'bg-danger/5' : ''}`}>
+                          <tr key={attr.attrId} className={`border-b border-surface-300/50 hover:bg-surface-200 ${attr.failing ? 'bg-danger/5' : attr.warn ? 'bg-warn/5' : ''}`}>
                             <td className="px-4 py-2 text-gray-300">{attr.name}</td>
                             <td className="px-4 py-2 tabular-nums text-gray-200 font-mono text-xs">
                               {formatNvmeAttrValue(attr.name, attr.value)}
@@ -379,7 +384,9 @@ export default function DriveDetailPage() {
                             <td className="px-4 py-2">
                               {attr.failing
                                 ? <span className="text-danger text-xs font-medium">FAILING</span>
-                                : <span className="text-brand text-xs">OK</span>}
+                                : attr.warn
+                                  ? <span className="text-warn text-xs font-medium">{attr.name === 'Percentage Used' ? 'WORN' : 'WARN'}</span>
+                                  : <span className="text-brand text-xs">OK</span>}
                             </td>
                           </tr>
                         ))}
