@@ -179,8 +179,8 @@ export default function DriveDetailPage() {
       { label: 'Powered On',        value: formatPowerOnTime(smart.powerOnHours) },
       { label: 'Power Cycles',      value: smart.powerCycleCount?.toLocaleString() ?? '—' },
       { label: 'Available Spare',   value: nvmeSparePct  != null ? `${nvmeSparePct.value}%`  : '—', warn: nvmeSparePct?.failing },
-      { label: 'Endurance Used',    value: nvmePctUsed   != null ? `${nvmePctUsed.value}%`   : '—', warn: nvmePctUsed?.failing },
-      { label: 'Media Errors',      value: nvmeMediaErr?.value.toLocaleString() ?? '—',              warn: nvmeMediaErr?.failing },
+      { label: 'Endurance Used',    value: nvmePctUsed   != null ? `${nvmePctUsed.value}%`   : '—' },
+      { label: 'Media Errors',      value: nvmeMediaErr?.value.toLocaleString() ?? '—',              warn: (nvmeMediaErr?.value ?? 0) > 0 },
       { label: 'Error Log Entries', value: nvmeErrLog?.value.toLocaleString()   ?? '—' },
       { label: 'Last Updated',      value: new Date(smart.timestamp).toLocaleString() },
     ] : [

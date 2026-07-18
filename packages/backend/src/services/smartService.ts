@@ -121,7 +121,16 @@ function parseNvmeAttributes(
     attrs.push({ attrId: id, name, value, worst: value, threshold, rawValue: value, failing });
   }
 
-  // Ordered to match nvme_smart_health_information_log field order for readability
+  // `failing` is reserved for the spec-defined failure signals — the same
+  // conditions smartctl derives smart_status.passed from: any critical_warning
+  // bit, or available spare below the device-reported threshold. Everything
+  // else is informational. In particular, Percentage Used is a wear odometer:
+  // the NVMe spec says a value of 100 "may not indicate an NVM subsystem
+  // failure", allows it to exceed 100, and several firmwares mis-report it
+  // (Samsung 990 Pro inflation bug, values like 133%). Vendors that DO treat
+  // rated-endurance exhaustion as a failure raise critical_warning bit 0x04
+  // themselves, which the Critical Warning rule already surfaces per-vendor.
+  // The temp-time fields are lifetime cumulative counters, not current state.
   if (log.critical_warning !== undefined)
     add(1,  'Critical Warning',            log.critical_warning,         log.critical_warning !== 0);
   if (log.available_spare !== undefined)
@@ -130,7 +139,7 @@ function parseNvmeAttributes(
   // use the health-log field first, fall back to the top-level endurance_used.
   const pctUsed = log.percentage_used ?? endurancePercent;
   if (pctUsed !== undefined)
-    add(3,  'Percentage Used',             pctUsed,                      pctUsed >= 100);
+    add(3,  'Percentage Used',             pctUsed);
   if (log.data_units_read !== undefined)
     add(4,  'Data Units Read',             log.data_units_read);
   if (log.data_units_written !== undefined)
@@ -140,7 +149,7 @@ function parseNvmeAttributes(
   if (log.host_writes !== undefined)
     add(7,  'Host Write Commands',         log.host_writes);
   if (log.media_errors !== undefined)
-    add(8,  'Media Errors',               log.media_errors,             log.media_errors > 0);
+    add(8,  'Media Errors',               log.media_errors);
   if (log.num_err_log_entries !== undefined)
     add(9,  'Error Log Entries',           log.num_err_log_entries);
   if (log.unsafe_shutdowns !== undefined)
@@ -148,9 +157,9 @@ function parseNvmeAttributes(
   if (log.controller_busy_time !== undefined)
     add(11, 'Controller Busy Time (min)',  log.controller_busy_time);
   if (log.warning_temp_time !== undefined)
-    add(12, 'Warning Temp Time (min)',     log.warning_temp_time,        log.warning_temp_time > 0);
+    add(12, 'Warning Temp Time (min)',     log.warning_temp_time);
   if (log.critical_comp_time !== undefined)
-    add(13, 'Critical Comp Time (min)',    log.critical_comp_time,       log.critical_comp_time > 0);
+    add(13, 'Critical Comp Time (min)',    log.critical_comp_time);
 
   return attrs;
 }
@@ -198,8 +207,13 @@ async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<
     uncorrectableErrors = attributes.find(a => a.attrId === 198)?.rawValue ?? null;
   } else if (nvmeLog) {
     attributes          = parseNvmeAttributes(nvmeLog, result.endurance_used?.current_percent);
-    reallocatedSectors  = nvmeLog.media_errors ?? null;
-    uncorrectableErrors = nvmeLog.num_err_log_entries ?? null;
+    // media_errors (unrecovered data-integrity errors) is the NVMe analog of
+    // ATA uncorrectable errors. NVMe has no reallocated-sector counter — spare
+    // consumption is covered by the Available Spare attribute instead. Do NOT
+    // map num_err_log_entries here: the error log counts benign entries (e.g.
+    // driver probes of unsupported log pages), so it is nonzero on virtually
+    // every healthy drive and would flip deriveHealth to 'warning' for all.
+    uncorrectableErrors = nvmeLog.media_errors ?? null;
   }
 
   return {
