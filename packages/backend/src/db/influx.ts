@@ -1,5 +1,6 @@
 import { InfluxDB, WriteApi, QueryApi } from '@influxdata/influxdb-client';
 import { config } from '../config.js';
+import { deletePredicate } from './flux.js';
 
 let _client: InfluxDB | null = null;
 let _writeApi: WriteApi | null = null;
@@ -35,13 +36,13 @@ export async function flushInflux(): Promise<void> {
 }
 
 /**
- * Delete points from InfluxDB matching a predicate.
+ * Delete every point of one measurement whose tags exactly match `tags`.
  * Uses the InfluxDB 2.x /api/v2/delete REST endpoint (no extra SDK package needed).
- * predicate examples:
- *   '_measurement="benchmark_points" AND run_id="7"'
- *   '_measurement="benchmark_points" AND serial="MOCK-SSD-001"'
+ * Examples:
+ *   deleteInfluxData('benchmark_points', { run_id: '7' })
+ *   deleteInfluxData('benchmark_points', { serial: 'MOCK-SSD-001' })
  */
-export async function deleteInfluxData(predicate: string): Promise<void> {
+export async function deleteInfluxData(measurement: string, tags: Record<string, string>): Promise<void> {
   const url = `${config.influx.url}/api/v2/delete` +
     `?org=${encodeURIComponent(config.influx.org)}` +
     `&bucket=${encodeURIComponent(config.influx.bucket)}`;
@@ -55,7 +56,7 @@ export async function deleteInfluxData(predicate: string): Promise<void> {
     body: JSON.stringify({
       start:     '1970-01-01T00:00:00Z',
       stop:      '2099-12-31T00:00:00Z',
-      predicate,
+      predicate: deletePredicate(measurement, tags),
     }),
   });
 

@@ -1,8 +1,8 @@
 import { eq, and, inArray } from 'drizzle-orm';
-import { Point } from '@influxdata/influxdb-client';
+import { Point, flux } from '@influxdata/influxdb-client';
 import { getDb } from '../db';
 import { drives, benchmarkRuns } from '../db/schema.js';
-import { getWriteApi } from '../db/influx.js';
+import { getWriteApi, getQueryApi, deleteInfluxData } from '../db/influx.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { runFioJob } from './fioRunner.js';
@@ -30,6 +30,14 @@ import type {
 
 // Position-curve sample size and iodepth are now drive-type-aware.
 // See getCurveParams() in benchmarkProfiles.ts.
+
+/** Thrown when a delete or purge is refused because a run on the drive is still pending or running. */
+export class BenchmarkBusyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BenchmarkBusyError';
+  }
+}
 
 /**
  * Resolve the block device path suitable for fio.
@@ -170,19 +178,20 @@ async function fetchRunProfiles(
   runId:          number | string,
   rangeStartSecs: number,
 ): Promise<ProfileResult[]> {
-  const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
-  const flux = `
-    from(bucket: "${config.influx.bucket}")
+  // The flux template tag renders every interpolated value as an escaped
+  // literal, so nothing from the caller can alter the query structure.
+  const query = flux`
+    from(bucket: ${config.influx.bucket})
       |> range(start: ${rangeStartSecs})
       |> filter(fn: (r) => r._measurement == "benchmark_profiles")
-      |> filter(fn: (r) => r.run_id == "${runId}")
+      |> filter(fn: (r) => r.run_id == ${String(runId)})
   `;
 
   const byProfile = new Map<string, Partial<ProfileResult>>();
 
-  await queryApi.collectRows(flux, (values, tableMeta) => {
+  await queryApi.collectRows(query, (values, tableMeta) => {
     const obj     = tableMeta.toObject(values) as Record<string, unknown>;
     const profile = String(obj['profile'] ?? '');
     const field   = String(obj['_field']  ?? '');
@@ -485,22 +494,21 @@ export async function getDriveSeries(driveId: number): Promise<BenchmarkSeries[]
   const earliestMs  = Math.min(...completedRuns.map(r => new Date(r.startedAt).getTime()));
   const rangeStart  = Math.floor(earliestMs / 1000) - 60;
 
-  const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
   // Single query — no field filter — returns position (int) and speed_bps (float) rows.
   // Join by (run_id, _time) to correctly pair each position with its speed.
-  const curveFLux = `
-    from(bucket: "${config.influx.bucket}")
+  const curveQuery = flux`
+    from(bucket: ${config.influx.bucket})
       |> range(start: ${rangeStart})
       |> filter(fn: (r) => r._measurement == "benchmark_points")
-      |> filter(fn: (r) => r.serial == "${driveRow.serialNumber}")
+      |> filter(fn: (r) => r.serial == ${driveRow.serialNumber})
   `;
 
   // byRun: run_id → (timestamp → { position?, speed? })
   const byRun = new Map<string, Map<string, { position?: number; speed?: number }>>();
 
-  await queryApi.collectRows(curveFLux, (values, tableMeta) => {
+  await queryApi.collectRows(curveQuery, (values, tableMeta) => {
     const obj   = tableMeta.toObject(values) as Record<string, unknown>;
     const runId = String(obj['run_id'] ?? '');
     if (!runId || !runMeta.has(runId)) return undefined;
@@ -560,20 +568,19 @@ export async function getRunDetail(runId: number): Promise<BenchmarkRunDetail | 
   let profileResults: ProfileResult[] = [];
 
   if (drive?.serialNumber) {
-    const { getQueryApi } = await import('../db/influx.js');
     const queryApi = getQueryApi();
     const startSecs = Math.floor(new Date(runRow.startedAt).getTime() / 1000) - 60;
 
     // Position curve
-    const curveFLux = `
-      from(bucket: "${config.influx.bucket}")
+    const curveQuery = flux`
+      from(bucket: ${config.influx.bucket})
         |> range(start: ${startSecs})
         |> filter(fn: (r) => r._measurement == "benchmark_points")
-        |> filter(fn: (r) => r.run_id == "${runId}")
+        |> filter(fn: (r) => r.run_id == ${String(runId)})
     `;
 
     const byTime = new Map<string, { position?: number; speed?: number }>();
-    await queryApi.collectRows(curveFLux, (values, tableMeta) => {
+    await queryApi.collectRows(curveQuery, (values, tableMeta) => {
       const obj   = tableMeta.toObject(values) as Record<string, unknown>;
       const ts    = String(obj['_time']  ?? '');
       const field = String(obj['_field'] ?? '');
@@ -620,14 +627,13 @@ export async function deleteRun(runId: number): Promise<void> {
   const run = await db.query.benchmarkRuns.findFirst({ where: eq(benchmarkRuns.runId, runId) });
   if (!run) return;
   if (run.status === 'running' || run.status === 'pending') {
-    throw new Error('Cannot delete a benchmark that is currently running');
+    throw new BenchmarkBusyError('Cannot delete a benchmark that is currently running');
   }
 
-  const { deleteInfluxData } = await import('../db/influx.js');
   // Remove both measurements for this run
   await Promise.all([
-    deleteInfluxData(`_measurement="benchmark_points"   AND run_id="${runId}"`),
-    deleteInfluxData(`_measurement="benchmark_profiles" AND run_id="${runId}"`),
+    deleteInfluxData('benchmark_points',   { run_id: String(runId) }),
+    deleteInfluxData('benchmark_profiles', { run_id: String(runId) }),
   ]);
   await db.delete(benchmarkRuns).where(eq(benchmarkRuns.runId, runId));
 }
@@ -644,12 +650,11 @@ export async function purgeAllRuns(driveId: number): Promise<void> {
       inArray(benchmarkRuns.status, ['running', 'pending']),
     ),
   });
-  if (active) throw new Error('Cannot purge while a benchmark is running');
+  if (active) throw new BenchmarkBusyError('Cannot purge while a benchmark is running');
 
-  const { deleteInfluxData } = await import('../db/influx.js');
   await Promise.all([
-    deleteInfluxData(`_measurement="benchmark_points"   AND serial="${driveRow.serialNumber}"`),
-    deleteInfluxData(`_measurement="benchmark_profiles" AND serial="${driveRow.serialNumber}"`),
+    deleteInfluxData('benchmark_points',   { serial: driveRow.serialNumber }),
+    deleteInfluxData('benchmark_profiles', { serial: driveRow.serialNumber }),
   ]);
   await db.delete(benchmarkRuns).where(eq(benchmarkRuns.driveId, driveId));
 }

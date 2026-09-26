@@ -1,10 +1,11 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { eq } from 'drizzle-orm';
-import { Point } from '@influxdata/influxdb-client';
+import { Point, flux } from '@influxdata/influxdb-client';
 import { getDb, getSqlite } from '../db';
 import { drives, smartCache } from '../db/schema.js';
-import { getWriteApi } from '../db/influx.js';
+import { getWriteApi, getQueryApi } from '../db/influx.js';
+import { fluxTime } from '../db/flux.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
@@ -428,14 +429,15 @@ export function getSmartCacheRow(driveId: number): SmartCacheRow | null {
 
 /** Query the latest SMART attribute snapshot for a drive serial from InfluxDB. */
 export async function getLatestSmartAttributes(serial: string): Promise<SmartAttribute[]> {
-  const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
-  const flux = `
-    from(bucket: "${config.influx.bucket}")
+  // The flux template tag renders every interpolated value as an escaped
+  // literal, so nothing from the caller can alter the query structure.
+  const query = flux`
+    from(bucket: ${config.influx.bucket})
       |> range(start: -30d)
       |> filter(fn: (r) => r._measurement == "smart_attributes")
-      |> filter(fn: (r) => r.serial == "${serial}")
+      |> filter(fn: (r) => r.serial == ${serial})
       |> last()
   `;
 
@@ -443,7 +445,7 @@ export async function getLatestSmartAttributes(serial: string): Promise<SmartAtt
   // then assemble one SmartAttribute per unique (attr_id, attr_name) pair.
   const byAttr = new Map<string, SmartAttribute>();
 
-  await queryApi.collectRows(flux, (values, tableMeta) => {
+  await queryApi.collectRows(query, (values, tableMeta) => {
     const obj    = tableMeta.toObject(values) as Record<string, unknown>;
     const attrId = Number(obj['attr_id'] ?? 0);
     const name   = String(obj['attr_name'] ?? '');
@@ -475,7 +477,6 @@ export async function getSmartHistory(
   from: string,
   to: string,
 ): Promise<Array<{ timestamp: string; attrId: number; name: string; value: number; rawValue: number }>> {
-  const { getQueryApi } = await import('../db/influx.js');
   const queryApi = getQueryApi();
 
   // These attributes are stored as top-level fields on smart_readings for ALL drive types
@@ -489,25 +490,30 @@ export async function getSmartHistory(
   const readingsField = attrName ? (READINGS_FIELD_MAP[attrName] ?? null) : 'temperature';
   const useReadings   = readingsField !== null;
 
-  const measurement = useReadings ? 'smart_readings' : 'smart_attributes';
-  const attrFilter  = useReadings ? '' : `|> filter(fn: (r) => r.attr_name == "${attrName}")`;
-  const fieldFilter = useReadings
-    ? `|> filter(fn: (r) => r._field == "${readingsField}")`
-    : `|> filter(fn: (r) => r._field == "value" or r._field == "raw_value")`;
+  // Every caller-supplied value (time bounds, serial, attribute name) goes
+  // through the flux template tag, which renders it as an escaped literal.
+  // Time bounds are additionally validated by fluxTime (and by the route
+  // schema) so only durations, RFC 3339 timestamps, or now() get this far.
+  const selectStages = readingsField !== null
+    ? flux`
+      |> filter(fn: (r) => r._measurement == "smart_readings")
+      |> filter(fn: (r) => r._field == ${readingsField})`
+    : flux`
+      |> filter(fn: (r) => r._measurement == "smart_attributes")
+      |> filter(fn: (r) => r.attr_name == ${attrName ?? ''})
+      |> filter(fn: (r) => r._field == "value" or r._field == "raw_value")`;
 
-  const flux = `
-    from(bucket: "${config.influx.bucket}")
-      |> range(start: ${from}, stop: ${to})
-      |> filter(fn: (r) => r._measurement == "${measurement}")
-      |> filter(fn: (r) => r.serial == "${serialNumber}")
-      ${attrFilter}
-      ${fieldFilter}
+  const query = flux`
+    from(bucket: ${config.influx.bucket})
+      |> range(start: ${fluxTime(from)}, stop: ${fluxTime(to)})
+      |> filter(fn: (r) => r.serial == ${serialNumber})
+      ${selectStages}
       |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
       |> sort(columns: ["_time"])
   `;
 
   const rows: Array<{ timestamp: string; attrId: number; name: string; value: number; rawValue: number }> = [];
-  await queryApi.collectRows(flux, (values, tableMeta) => {
+  await queryApi.collectRows(query, (values, tableMeta) => {
     const obj = tableMeta.toObject(values) as Record<string, unknown>;
     const val = useReadings
       ? Number(obj[readingsField!] ?? 0)

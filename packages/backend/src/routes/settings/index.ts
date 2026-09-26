@@ -6,12 +6,12 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ enabled: getCommunitySharingEnabled() });
   });
 
-  app.put('/community-sharing', async (req, reply) => {
-    const body = req.body as { enabled?: unknown };
-    if (typeof body.enabled !== 'boolean') {
-      return reply.status(400).send({ error: '`enabled` must be a boolean' });
-    }
-    setCommunitySharingEnabled(body.enabled);
-    return reply.send({ enabled: body.enabled });
-  });
+  app.put<{ Body: { enabled: boolean } }>(
+    '/community-sharing',
+    { schema: { body: { type: 'object', required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
+    async (req, reply) => {
+      setCommunitySharingEnabled(req.body.enabled);
+      return reply.send({ enabled: req.body.enabled });
+    },
+  );
 }

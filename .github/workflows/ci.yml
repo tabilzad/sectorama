@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build & Typecheck
+    name: Build, Typecheck & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -29,3 +29,6 @@ jobs:
 
       - name: Typecheck all workspaces
         run: npm run typecheck
+
+      - name: Test
+        run: npm test

@@ -18,7 +18,8 @@ export function formatSpeed(bytesPerSec: number, decimals = 2): string {
 
 export type DriveType = 'HDD' | 'SSD' | 'NVMe' | 'Unknown';
 export type DriveHealth = 'ok' | 'warning' | 'failed' | 'unknown';
-export type DashboardPreset = 'custom' | 'capacity' | 'capacity_asc' | 'temperature' | 'temperature_asc';
+export const DASHBOARD_PRESETS = ['custom', 'capacity', 'capacity_asc', 'temperature', 'temperature_asc'] as const;
+export type DashboardPreset = typeof DASHBOARD_PRESETS[number];
 
 export interface Drive {
     driveId: number;
@@ -180,10 +181,12 @@ export interface SystemStats {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export type AlertType = 'smart_error' | 'temperature' | 'benchmark_complete';
+export const ALERT_TYPES = ['smart_error', 'temperature', 'benchmark_complete'] as const;
+export type AlertType = typeof ALERT_TYPES[number];
 /** Superset of AlertType — includes derived events that share a parent subscription. */
 export type AlertEventType = AlertType | 'temperature_recovery';
-export type ChannelType = 'webhook' | 'slack';
+export const CHANNEL_TYPES = ['webhook', 'slack'] as const;
+export type ChannelType = typeof CHANNEL_TYPES[number];
 
 export interface WebhookChannelConfig {
     url: string;

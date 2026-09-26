@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '../../db/index.js';
 import {
+  drives,
   notificationChannels,
   notificationSubscriptions,
   driveAlertThresholds,
@@ -9,6 +10,9 @@ import {
 import { rowToChannel, rowToSub } from '../../db/mappers.js';
 import { createChannel } from '../../services/notifications/channelFactory.js';
 import { evaluateAndNotifyNewChannel } from '../../services/notifications/notificationService.js';
+import {
+  idParams, driveIdParams, positiveInt, shortText, alertType, channelType, celsius, nullableCelsius,
+} from '../schemas.js';
 import type {
   DriveAlertThreshold,
   ChannelType,
@@ -16,31 +20,53 @@ import type {
   Alert,
 } from '@sectorama/shared';
 
+interface IdParams      { id: number }
+interface DriveIdParams { driveId: number }
+
+const MAX_URL_LENGTH    = 2048;
+const MAX_SECRET_LENGTH = 1024;
+
+/** True for a well-formed http(s) URL of sane length. */
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > MAX_URL_LENGTH) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function isNonEmptyString(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxLength;
+}
+
+/**
+ * Validate the type-specific channel config. Kept as code rather than JSON
+ * Schema because the PUT route validates against the channel's stored type,
+ * which is not part of the request body.
+ */
 function validateChannelConfig(type: ChannelType, cfg: unknown): string | null {
-  if (!cfg || typeof cfg !== 'object') return 'Config must be an object';
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return 'Config must be an object';
   const obj = cfg as Record<string, unknown>;
   if (type === 'webhook') {
-    if (typeof obj['url'] !== 'string' || !obj['url']) return 'Webhook config requires a url field';
+    if (!isHttpUrl(obj['url'])) return 'Webhook config requires a valid http(s) url';
     const auth = obj['auth'];
     if (!auth || typeof auth !== 'object') return 'Webhook config requires an auth object';
-    const authType = (auth as Record<string, unknown>)['type'];
+    const authObj  = auth as Record<string, unknown>;
+    const authType = authObj['type'];
     if (!['none', 'basic', 'bearer'].includes(String(authType))) {
       return 'auth.type must be none, basic, or bearer';
     }
     if (authType === 'basic') {
-      const { username, password } = auth as Record<string, unknown>;
-      if (typeof username !== 'string' || !username) return 'Basic auth requires a username';
-      if (typeof password !== 'string' || !password) return 'Basic auth requires a password';
+      if (!isNonEmptyString(authObj['username'], MAX_SECRET_LENGTH)) return 'Basic auth requires a username';
+      if (!isNonEmptyString(authObj['password'], MAX_SECRET_LENGTH)) return 'Basic auth requires a password';
     }
     if (authType === 'bearer') {
-      if (typeof (auth as Record<string, unknown>)['token'] !== 'string' || !(auth as Record<string, unknown>)['token']) {
-        return 'Bearer auth requires a token';
-      }
+      if (!isNonEmptyString(authObj['token'], MAX_SECRET_LENGTH)) return 'Bearer auth requires a token';
     }
   } else if (type === 'slack') {
-    if (typeof obj['webhookUrl'] !== 'string' || !obj['webhookUrl']) {
-      return 'Slack config requires a webhookUrl field';
-    }
+    if (!isHttpUrl(obj['webhookUrl'])) return 'Slack config requires a valid http(s) webhookUrl';
   }
   return null;
 }
@@ -51,7 +77,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/v1/notifications/channels
   app.get('/api/v1/notifications/channels', async (_req, reply) => {
-    const db = getDb();
+    const db   = getDb();
     const rows = await db.select().from(notificationChannels);
     return reply.send(rows.map(rowToChannel));
   });
@@ -59,6 +85,19 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/v1/notifications/channels
   app.post<{ Body: { name: string; type: ChannelType; config: unknown } }>(
     '/api/v1/notifications/channels',
+    {
+      schema: {
+        body: {
+          type:       'object',
+          required:   ['name', 'type', 'config'],
+          properties: {
+            name:   shortText,
+            type:   channelType,
+            config: { type: 'object' },
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const { name, type, config: cfg } = req.body;
 
@@ -102,86 +141,109 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   // PUT /api/v1/notifications/channels/:id
   app.put<{
-    Params: { id: string };
-    Body: { name?: string; config?: unknown; enabled?: boolean };
-  }>('/api/v1/notifications/channels/:id', async (req, reply) => {
-    const id = parseInt(req.params.id, 10);
-    const db = getDb();
+    Params: IdParams;
+    Body:   { name?: string; config?: unknown; enabled?: boolean };
+  }>(
+    '/api/v1/notifications/channels/:id',
+    {
+      schema: {
+        params: idParams,
+        body:   {
+          type:       'object',
+          properties: {
+            name:    shortText,
+            config:  { type: 'object' },
+            enabled: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const id = req.params.id;
+      const db = getDb();
 
-    const existing = await db.query.notificationChannels.findFirst({
-      where: eq(notificationChannels.id, id),
-    });
-    if (!existing) return reply.status(404).send({ error: 'Channel not found' });
+      const existing = await db.query.notificationChannels.findFirst({
+        where: eq(notificationChannels.id, id),
+      });
+      if (!existing) return reply.status(404).send({ error: 'Channel not found' });
 
-    if (req.body.config !== undefined) {
-      const configError = validateChannelConfig(existing.type as ChannelType, req.body.config);
-      if (configError) {
-        return reply.status(400).send({ error: configError });
+      if (req.body.config !== undefined) {
+        const configError = validateChannelConfig(existing.type as ChannelType, req.body.config);
+        if (configError) {
+          return reply.status(400).send({ error: configError });
+        }
       }
-    }
 
-    const updates: Partial<typeof notificationChannels.$inferInsert> = {};
-    if (req.body.name    !== undefined) updates.name    = req.body.name;
-    if (req.body.config  !== undefined) updates.config  = JSON.stringify(req.body.config);
-    if (req.body.enabled !== undefined) updates.enabled = req.body.enabled;
+      const updates: Partial<typeof notificationChannels.$inferInsert> = {};
+      if (req.body.name    !== undefined) updates.name    = req.body.name;
+      if (req.body.config  !== undefined) updates.config  = JSON.stringify(req.body.config);
+      if (req.body.enabled !== undefined) updates.enabled = req.body.enabled;
 
-    await db.update(notificationChannels).set(updates).where(eq(notificationChannels.id, id));
-    const updated = await db.query.notificationChannels.findFirst({
-      where: eq(notificationChannels.id, id),
-    });
-    return reply.send(rowToChannel(updated!));
-  });
+      if (Object.keys(updates).length > 0) {
+        await db.update(notificationChannels).set(updates).where(eq(notificationChannels.id, id));
+      }
+      const updated = await db.query.notificationChannels.findFirst({
+        where: eq(notificationChannels.id, id),
+      });
+      return reply.send(rowToChannel(updated!));
+    },
+  );
 
   // DELETE /api/v1/notifications/channels/:id
-  app.delete<{ Params: { id: string } }>('/api/v1/notifications/channels/:id', async (req, reply) => {
-    const id = parseInt(req.params.id, 10);
-    const db = getDb();
-    await db.delete(notificationChannels).where(eq(notificationChannels.id, id));
-    return reply.status(204).send();
-  });
+  app.delete<{ Params: IdParams }>(
+    '/api/v1/notifications/channels/:id',
+    { schema: { params: idParams } },
+    async (req, reply) => {
+      const db = getDb();
+      await db.delete(notificationChannels).where(eq(notificationChannels.id, req.params.id));
+      return reply.status(204).send();
+    },
+  );
 
   // POST /api/v1/notifications/channels/:id/test
-  app.post<{ Params: { id: string } }>('/api/v1/notifications/channels/:id/test', async (req, reply) => {
-    const id = parseInt(req.params.id, 10);
-    const db = getDb();
+  app.post<{ Params: IdParams }>(
+    '/api/v1/notifications/channels/:id/test',
+    { schema: { params: idParams } },
+    async (req, reply) => {
+      const db  = getDb();
+      const row = await db.query.notificationChannels.findFirst({
+        where: eq(notificationChannels.id, req.params.id),
+      });
+      if (!row) return reply.status(404).send({ error: 'Channel not found' });
 
-    const row = await db.query.notificationChannels.findFirst({
-      where: eq(notificationChannels.id, id),
-    });
-    if (!row) return reply.status(404).send({ error: 'Channel not found' });
+      const sampleAlert: Alert = {
+        type:        'smart_error',
+        driveId:     0,
+        driveSerial: 'TEST-SERIAL-00000',
+        driveModel:  'Test Drive (Sample Alert)',
+        message:     'This is a test notification from Sectorama. If you see this, the channel is configured correctly.',
+        timestamp:   new Date().toISOString(),
+      };
 
-    const sampleAlert: Alert = {
-      type:        'smart_error',
-      driveId:     0,
-      driveSerial: 'TEST-SERIAL-00000',
-      driveModel:  'Test Drive (Sample Alert)',
-      message:     'This is a test notification from Sectorama. If you see this, the channel is configured correctly.',
-      timestamp:   new Date().toISOString(),
-    };
-
-    try {
-      const channel = createChannel(row.type as ChannelType, JSON.parse(row.config));
-      await channel.send(sampleAlert);
-      return reply.send({ ok: true });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return reply.status(502).send({ error: `Delivery failed: ${message}` });
-    }
-  });
+      try {
+        const channel = createChannel(row.type as ChannelType, JSON.parse(row.config));
+        await channel.send(sampleAlert);
+        return reply.send({ ok: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.status(502).send({ error: `Delivery failed: ${message}` });
+      }
+    },
+  );
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
 
   // GET /api/v1/notifications/subscriptions[?channelId=]
-  app.get<{ Querystring: { channelId?: string } }>(
+  app.get<{ Querystring: { channelId?: number } }>(
     '/api/v1/notifications/subscriptions',
+    { schema: { querystring: { type: 'object', properties: { channelId: positiveInt } } } },
     async (req, reply) => {
       const db = getDb();
-      if (req.query.channelId) {
-        const cid = parseInt(req.query.channelId, 10);
+      if (req.query.channelId !== undefined) {
         const rows = await db
           .select()
           .from(notificationSubscriptions)
-          .where(eq(notificationSubscriptions.channelId, cid));
+          .where(eq(notificationSubscriptions.channelId, req.query.channelId));
         return reply.send(rows.map(rowToSub));
       }
       const rows = await db.select().from(notificationSubscriptions);
@@ -192,9 +254,32 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/v1/notifications/subscriptions
   app.post<{ Body: { channelId: number; alertType: AlertType } }>(
     '/api/v1/notifications/subscriptions',
+    {
+      schema: {
+        body: {
+          type:       'object',
+          required:   ['channelId', 'alertType'],
+          properties: { channelId: positiveInt, alertType },
+        },
+      },
+    },
     async (req, reply) => {
       const { channelId, alertType } = req.body;
       const db = getDb();
+
+      const channel = await db.query.notificationChannels.findFirst({
+        where:   eq(notificationChannels.id, channelId),
+        columns: { id: true },
+      });
+      if (!channel) return reply.status(404).send({ error: 'Channel not found' });
+
+      const duplicate = await db.query.notificationSubscriptions.findFirst({
+        where: and(
+          eq(notificationSubscriptions.channelId, channelId),
+          eq(notificationSubscriptions.alertType, alertType),
+        ),
+      });
+      if (duplicate) return reply.status(409).send({ error: 'Channel is already subscribed to this alert type' });
 
       const result = await db.insert(notificationSubscriptions).values({ channelId, alertType });
       const newId  = Number(result.lastInsertRowid);
@@ -213,12 +298,12 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // DELETE /api/v1/notifications/subscriptions/:id
-  app.delete<{ Params: { id: string } }>(
+  app.delete<{ Params: IdParams }>(
     '/api/v1/notifications/subscriptions/:id',
+    { schema: { params: idParams } },
     async (req, reply) => {
-      const id = parseInt(req.params.id, 10);
       const db = getDb();
-      await db.delete(notificationSubscriptions).where(eq(notificationSubscriptions.id, id));
+      await db.delete(notificationSubscriptions).where(eq(notificationSubscriptions.id, req.params.id));
       return reply.status(204).send();
     },
   );
@@ -227,7 +312,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   // GET /api/v1/notifications/thresholds
   app.get('/api/v1/notifications/thresholds', async (_req, reply) => {
-    const db = getDb();
+    const db   = getDb();
     const rows = await db.select().from(driveAlertThresholds);
     const result: DriveAlertThreshold[] = rows.map(r => ({
       driveId:                     r.driveId,
@@ -241,7 +326,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
   // PUT /api/v1/notifications/thresholds/:driveId
   app.put<{
-    Params: { driveId: string };
+    Params: DriveIdParams;
     Body: {
       temperatureThresholdCelsius: number;
       tempNormalCelsius?: number | null;
@@ -250,8 +335,23 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     };
   }>(
     '/api/v1/notifications/thresholds/:driveId',
+    {
+      schema: {
+        params: driveIdParams,
+        body:   {
+          type:       'object',
+          required:   ['temperatureThresholdCelsius'],
+          properties: {
+            temperatureThresholdCelsius: celsius,
+            tempNormalCelsius:           nullableCelsius,
+            tempWarmCelsius:             nullableCelsius,
+            tempTooHotCelsius:           nullableCelsius,
+          },
+        },
+      },
+    },
     async (req, reply) => {
-      const driveId = parseInt(req.params.driveId, 10);
+      const driveId = req.params.driveId;
       const {
         temperatureThresholdCelsius,
         tempNormalCelsius  = null,
@@ -259,6 +359,9 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         tempTooHotCelsius  = null,
       } = req.body;
       const db = getDb();
+
+      const drive = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId), columns: { driveId: true } });
+      if (!drive) return reply.status(404).send({ error: 'Drive not found' });
 
       await db.insert(driveAlertThresholds)
         .values({ driveId, temperatureThresholdCelsius, tempNormalCelsius, tempWarmCelsius, tempTooHotCelsius })
@@ -282,12 +385,12 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // DELETE /api/v1/notifications/thresholds/:driveId
-  app.delete<{ Params: { driveId: string } }>(
+  app.delete<{ Params: DriveIdParams }>(
     '/api/v1/notifications/thresholds/:driveId',
+    { schema: { params: driveIdParams } },
     async (req, reply) => {
-      const driveId = parseInt(req.params.driveId, 10);
       const db = getDb();
-      await db.delete(driveAlertThresholds).where(eq(driveAlertThresholds.driveId, driveId));
+      await db.delete(driveAlertThresholds).where(eq(driveAlertThresholds.driveId, req.params.driveId));
       return reply.status(204).send();
     },
   );
