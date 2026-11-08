@@ -40,6 +40,13 @@ export const config = {
     defaultTempThresholdCelsius: parseInt(env('TEMPERATURE_ALERT_THRESHOLD_CELSIUS', '50'), 10),
   },
 
+  storage: {
+    /** Filesystems mounted under this path are measured for the dashboard's used/free figures. */
+    mountRoot:       env('STORAGE_MOUNT_ROOT', '/mnt'),
+    /** Directory holding Unraid's disks.ini; when readable it replaces mount scanning. */
+    unraidEmhttpDir: env('UNRAID_EMHTTP_DIR', '/var/local/emhttp'),
+  },
+
   paths: {
     /** Built React SPA — served as static files by Fastify */
     public: env('PUBLIC_PATH', path.resolve(process.cwd(), 'public')),

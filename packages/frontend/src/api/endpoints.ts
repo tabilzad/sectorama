@@ -34,5 +34,6 @@ export const API = {
   settings: {
     communitySharing: '/settings/community-sharing',
   },
-  stats: '/stats',
+  stats:   '/stats',
+  storage: '/storage',
 } as const;

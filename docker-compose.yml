@@ -9,6 +9,9 @@ services:
       - "8888:8888"
     volumes:
       - app-data:/data          # SQLite DB + other app state
+      # Optional — lets the dashboard show used/free space (see README → Storage usage):
+      #- /mnt:/mnt:ro                              # generic Linux: every mount under /mnt
+      #- /var/local/emhttp:/var/local/emhttp:ro    # Unraid: per-disk usage from the array status
       #- /dev:/dev:ro            # host block devices for smartctl discovery + fio benchmarks
     environment:
       - NODE_ENV=production

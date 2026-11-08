@@ -3,9 +3,15 @@ import { eq, count } from 'drizzle-orm';
 import { getDb } from '../../db';
 import { drives, benchmarkRuns, smartCache } from '../../db/schema.js';
 import { deriveHealth } from '../../utils/health.js';
-import type { SystemStats } from '@sectorama/shared';
+import { getStorageOverview } from '../../services/storage/storageService.js';
+import type { SystemStats, StorageOverview } from '@sectorama/shared';
 
 export async function statsRoutes(app: FastifyInstance): Promise<void> {
+  // GET /api/v1/storage — raw capacity and filesystem usage per drive class
+  app.get<{ Reply: StorageOverview }>('/api/v1/storage', async (_req, reply) => {
+    return reply.send(await getStorageOverview());
+  });
+
   app.get<{ Reply: SystemStats }>('/api/v1/stats', async (_req, reply) => {
     const db = getDb();
 
