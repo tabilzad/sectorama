@@ -2,10 +2,45 @@ import type { FastifyInstance } from 'fastify';
 import {
   getCommunitySharingEnabled,
   setCommunitySharingEnabled,
-  getSmartPollingSettings,
-  setSmartPollingSettings,
+  getRuntimeSettingsResponse,
+  updateRuntimeSettings,
+  SettingsValidationError,
 } from '../../services/settingsService.js';
-import type { SmartPollingSettings } from '@sectorama/shared';
+import { celsius, numPoints } from '../schemas.js';
+import {
+  SMART_POLL_INTERVAL_CHOICES,
+  SMART_POLL_CONCURRENCY_MAX,
+  type RuntimeSettingsResponse,
+  type RuntimeSettingsUpdate,
+} from '@sectorama/shared';
+
+const runtimeSettingsUpdateSchema = {
+  type:          'object',
+  minProperties: 1,
+  properties: {
+    smartPolling: {
+      type: 'object',
+      properties: {
+        skipStandby:     { type: 'boolean' },
+        intervalMinutes: { type: 'integer', enum: [...SMART_POLL_INTERVAL_CHOICES] },
+        concurrency:     { type: 'integer', minimum: 1, maximum: SMART_POLL_CONCURRENCY_MAX },
+      },
+    },
+    benchmark: {
+      type: 'object',
+      properties: { defaultNumPoints: numPoints },
+    },
+    temperature: {
+      type: 'object',
+      properties: {
+        normalCelsius: celsius,
+        warmCelsius:   celsius,
+        alertCelsius:  celsius,
+        tooHotCelsius: celsius,
+      },
+    },
+  },
+} as const;
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   // ── Community sharing ─────────────────────────────────────────────────────
@@ -23,22 +58,25 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── SMART polling ─────────────────────────────────────────────────────────
+  // ── Runtime settings ──────────────────────────────────────────────────────
+  // Polling, benchmark and temperature defaults. Values pinned by an
+  // environment variable are reported in `managedByEnv` and cannot be changed
+  // here.
 
-  app.get<{ Reply: SmartPollingSettings }>('/smart-polling', async (_req, reply) => {
-    return reply.send(getSmartPollingSettings());
+  app.get<{ Reply: RuntimeSettingsResponse }>('/runtime', async (_req, reply) => {
+    return reply.send(getRuntimeSettingsResponse());
   });
 
-  app.put<{ Body: SmartPollingSettings; Reply: SmartPollingSettings }>(
-    '/smart-polling',
-    {
-      schema: {
-        body: { type: 'object', required: ['skipStandby'], properties: { skipStandby: { type: 'boolean' } } },
-      },
-    },
+  app.put<{ Body: RuntimeSettingsUpdate; Reply: RuntimeSettingsResponse | { error: string } }>(
+    '/runtime',
+    { schema: { body: runtimeSettingsUpdateSchema } },
     async (req, reply) => {
-      setSmartPollingSettings({ skipStandby: req.body.skipStandby });
-      return reply.send(getSmartPollingSettings());
+      try {
+        return reply.send(updateRuntimeSettings(req.body));
+      } catch (err) {
+        if (err instanceof SettingsValidationError) return reply.status(400).send({ error: err.message });
+        throw err;
+      }
     },
   );
 }

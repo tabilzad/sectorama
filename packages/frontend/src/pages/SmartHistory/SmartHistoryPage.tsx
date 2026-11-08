@@ -3,11 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { useDisks } from '@/api/hooks/useDisks.ts';
 import { useSmartHistory } from '@/api/hooks/useSmart.ts';
 import { useAlertThresholds } from '@/api/hooks/useNotifications.ts';
+import { useRuntimeSettings } from '@/api/hooks/useSettings';
 import SmartAttributeChart, { type TempZoneConfig } from '../../components/charts/SmartAttributeChart';
-import { ZONE_DEFAULTS } from '../DriveDetail/DriveAlertSettings';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import { FormSelect } from '../../components/ui/FormSelect';
-import type { DriveSummary, DriveAlertThreshold } from '@sectorama/shared';
+import { RUNTIME_SETTINGS_DEFAULTS, type DriveSummary, type DriveAlertThreshold, type TemperatureDefaults } from '@sectorama/shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -62,17 +62,18 @@ function formatAttrLabel(attr: string): string {
   return attr.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** The drive's own zones where set, otherwise the global temperature defaults from Settings. */
 function resolveZoneConfig(
   driveId: number,
   thresholds: DriveAlertThreshold[] | undefined,
-): TempZoneConfig | undefined {
+  defaults: TemperatureDefaults,
+): TempZoneConfig {
   const t = thresholds?.find(x => x.driveId === driveId);
-  if (!t) return undefined;
   return {
-    normal: t.tempNormalCelsius  ?? ZONE_DEFAULTS.normal,
-    warm:   t.tempWarmCelsius    ?? ZONE_DEFAULTS.warm,
-    hot:    t.temperatureThresholdCelsius,
-    tooHot: t.tempTooHotCelsius  ?? ZONE_DEFAULTS.tooHot,
+    normal: t?.tempNormalCelsius           ?? defaults.normalCelsius,
+    warm:   t?.tempWarmCelsius             ?? defaults.warmCelsius,
+    hot:    t?.temperatureThresholdCelsius ?? defaults.alertCelsius,
+    tooHot: t?.tempTooHotCelsius           ?? defaults.tooHotCelsius,
   };
 }
 
@@ -133,9 +134,10 @@ interface AllDrivesViewProps {
   attr:       string;
   timeRange:  string;
   thresholds: DriveAlertThreshold[] | undefined;
+  defaults:   TemperatureDefaults;
 }
 
-function AllDrivesView({ disks, attr, timeRange, thresholds }: AllDrivesViewProps) {
+function AllDrivesView({ disks, attr, timeRange, thresholds, defaults }: AllDrivesViewProps) {
   if (!disks.length) {
     return (
       <p className="text-gray-500 text-center py-16">No drives registered yet.</p>
@@ -153,7 +155,7 @@ function AllDrivesView({ disks, attr, timeRange, thresholds }: AllDrivesViewProp
           drive={drive}
           attr={attr}
           timeRange={timeRange}
-          zoneConfig={resolveZoneConfig(drive.driveId, thresholds)}
+          zoneConfig={resolveZoneConfig(drive.driveId, thresholds, defaults)}
         />
       ))}
     </div>
@@ -167,7 +169,9 @@ type DriveSelection = number | 'all' | null;
 export default function SmartHistoryPage() {
   const { data: disks, isLoading }  = useDisks();
   const { data: thresholds }        = useAlertThresholds();
+  const { data: runtime }           = useRuntimeSettings();
   const [searchParams]              = useSearchParams();
+  const tempDefaults = runtime?.settings.temperature ?? RUNTIME_SETTINGS_DEFAULTS.temperature;
 
   const initialDriveId = searchParams.get('driveId');
   const [selectedDriveId, setSelectedDriveId] = useState<DriveSelection>(
@@ -187,7 +191,7 @@ export default function SmartHistoryPage() {
 
   const historyPoints = Array.isArray(history) ? history : [];
   const zoneConfig    = singleDriveId !== null
-    ? resolveZoneConfig(singleDriveId, thresholds)
+    ? resolveZoneConfig(singleDriveId, thresholds, tempDefaults)
     : undefined;
 
   // Available attributes depend on the selected drive's protocol
@@ -287,6 +291,7 @@ export default function SmartHistoryPage() {
           attr={selectedAttr}
           timeRange={timeRange}
           thresholds={thresholds}
+          defaults={tempDefaults}
         />
       ) : histLoading ? (
         <div className="card">

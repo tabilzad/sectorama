@@ -34,7 +34,7 @@ export const API = {
   },
   settings: {
     communitySharing: '/settings/community-sharing',
-    smartPolling:     '/settings/smart-polling',
+    runtime:          '/settings/runtime',
   },
   stats:   '/stats',
   storage: '/storage',

@@ -459,9 +459,9 @@ export async function scheduledSmartPoll(
 }
 
 /**
- * Run one read per connected drive, a few drives at a time (SMART_POLL_CONCURRENCY),
- * with the standby setting read once for the whole sweep. One summary line is
- * logged instead of a line per sleeping drive.
+ * Run one read per connected drive, a few drives at a time (the concurrency
+ * setting), with the polling settings read once for the whole sweep. One
+ * summary line is logged instead of a line per sleeping drive.
  */
 async function sweepConnectedDrives(
   label: string,
@@ -474,7 +474,7 @@ async function sweepConnectedDrives(
   if (connectedDrives.length === 0) return;
 
   const opts    = getSmartPollingSettings();
-  const results = await mapWithConcurrency(connectedDrives, config.smart.pollConcurrency, drive =>
+  const results = await mapWithConcurrency(connectedDrives, opts.concurrency, drive =>
     readOne(drive.driveId, opts),
   );
 

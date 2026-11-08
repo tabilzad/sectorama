@@ -14,7 +14,7 @@ import {
 } from './benchmarkProfiles.js';
 import { computeDiskRegion } from './diskRegion.js';
 import { acquireBenchmarkLock, releaseBenchmarkLock } from './benchmarkLock.js';
-import { getCommunitySharingEnabled } from './settingsService.js';
+import { getCommunitySharingEnabled, getRuntimeSettings } from './settingsService.js';
 import { getSmartCacheRow, getLatestSmartAttributes } from './smartService.js';
 import type { BenchmarkRunRow, DriveRow } from '../db/schema.js';
 import { gatherEnvironmentInfo } from './environmentInfo.js';
@@ -314,7 +314,7 @@ async function executeBenchmarkLocked(
 ): Promise<void> {
   const db = getDb();
 
-  const numPoints = runRow.numPoints ?? config.benchmark.numPoints;
+  const numPoints = runRow.numPoints ?? getRuntimeSettings().benchmark.defaultNumPoints;
 
   await db.update(benchmarkRuns)
     .set({ status: 'running' })

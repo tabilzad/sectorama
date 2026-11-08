@@ -2,7 +2,8 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceArea,
 } from 'recharts';
-import { ZONE_COLORS, ZONE_DEFAULTS } from '../../pages/DriveDetail/DriveAlertSettings';
+import { RUNTIME_SETTINGS_DEFAULTS } from '@sectorama/shared';
+import { ZONE_COLORS } from '../temperature/TemperatureZoneEditor';
 
 // ─── Temperature zone config ──────────────────────────────────────────────────
 
@@ -14,11 +15,16 @@ export interface TempZoneConfig {
   tooHot: number;   // Hot → Too Hot
 }
 
+/**
+ * Built-in defaults, used only until the runtime settings have loaded. Pages
+ * pass a config resolved from the server's temperature defaults and the
+ * drive's own override.
+ */
 export const DEFAULT_ZONE_CONFIG: TempZoneConfig = {
-  normal: ZONE_DEFAULTS.normal,
-  warm:   ZONE_DEFAULTS.warm,
-  hot:    ZONE_DEFAULTS.alert,
-  tooHot: ZONE_DEFAULTS.tooHot,
+  normal: RUNTIME_SETTINGS_DEFAULTS.temperature.normalCelsius,
+  warm:   RUNTIME_SETTINGS_DEFAULTS.temperature.warmCelsius,
+  hot:    RUNTIME_SETTINGS_DEFAULTS.temperature.alertCelsius,
+  tooHot: RUNTIME_SETTINGS_DEFAULTS.temperature.tooHotCelsius,
 };
 
 interface TempZoneDef { min: number; max: number; label: string; fill: string; }

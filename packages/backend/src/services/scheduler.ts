@@ -6,7 +6,7 @@ import { createRun, executeBenchmark } from './benchmarkEngine.js';
 import { getActiveBenchmark } from './benchmarkLock.js';
 import { notifyBenchmarkComplete } from './notifications/notificationService.js';
 import { checkDrivePresence } from './drivePresence.js';
-import { config } from '../config.js';
+import { getRuntimeSettings, onRuntimeSettingsChanged } from './settingsService.js';
 
 // Map: scheduleId → ScheduledTask
 const activeTasks = new Map<number, ScheduledTask>();
@@ -92,22 +92,31 @@ export async function initScheduler(): Promise<void> {
   console.log(`[scheduler] Initialized ${schedules.length} schedule(s)`);
 }
 
-/** Start a periodic SMART poll for all connected drives */
-export function initSmartPoller(): void {
-  const intervalMinutes = config.smart.pollIntervalMinutes;
+/**
+ * Cron expression for a SMART poll every `intervalMinutes`.
+ *
+ * Uses a 6-field expression (sec min hr day mon wday) with sec=30 to avoid a
+ * node-cron v4 bug: getNextMatch() returns the CURRENT minute (already elapsed
+ * by a few seconds) when the process starts mid-minute and second field is [0],
+ * causing getDelay()=0 and an infinite immediate-heartbeat loop that floods the
+ * log with "missed execution" warnings. With sec=30, availableValue([30], N)
+ * for any N<30 returns 30 (a future time within the same minute), and for N>=30
+ * advances to the next matching minute — both cases yield a positive delay.
+ */
+export function smartPollCronExpression(intervalMinutes: number): string {
+  if (intervalMinutes < 60) return `30 */${intervalMinutes} * * * *`;
+  const hours = Math.floor(intervalMinutes / 60);
+  return hours >= 24 ? '30 0 0 * * *' : `30 0 */${hours} * * *`;
+}
 
-  // Use a 6-field expression (sec min hr day mon wday) with sec=30 to avoid a
-  // node-cron v4 bug: getNextMatch() returns the CURRENT minute (already elapsed
-  // by a few seconds) when the process starts mid-minute and second field is [0],
-  // causing getDelay()=0 and an infinite immediate-heartbeat loop that floods the
-  // log with "missed execution" warnings. With sec=30, availableValue([30], N)
-  // for any N<30 returns 30 (a future time within the same minute), and for N>=30
-  // advances to the next matching minute — both cases yield a positive delay.
-  const cronExpr = intervalMinutes >= 60
-    ? `30 0 */${Math.floor(intervalMinutes / 60)} * * *`
-    : `30 */${intervalMinutes} * * * *`;
+let smartPollerTask: ScheduledTask | null = null;
+let smartPollerMinutes = 0;
 
-  schedule(cronExpr, async () => {
+function scheduleSmartPoller(intervalMinutes: number): void {
+  smartPollerTask?.stop();
+  const cronExpr = smartPollCronExpression(intervalMinutes);
+
+  smartPollerTask = schedule(cronExpr, async () => {
     // Presence first: a drive that vanished must not be polled, and one that
     // returned must be registered before its SMART data is read.
     try {
@@ -122,6 +131,21 @@ export function initSmartPoller(): void {
       console.error('[scheduler] SMART poll failed:', err);
     }
   });
+  smartPollerMinutes = intervalMinutes;
 
   console.log(`[scheduler] SMART poller scheduled every ${intervalMinutes} minute(s) (${cronExpr})`);
+}
+
+/**
+ * Start the periodic SMART poll for all connected drives and follow the
+ * interval setting: a change from the Settings page replaces the cron task
+ * without a restart.
+ */
+export function initSmartPoller(): void {
+  scheduleSmartPoller(getRuntimeSettings().smartPolling.intervalMinutes);
+  onRuntimeSettingsChanged(next => {
+    if (smartPollerTask && next.smartPolling.intervalMinutes !== smartPollerMinutes) {
+      scheduleSmartPoller(next.smartPolling.intervalMinutes);
+    }
+  });
 }

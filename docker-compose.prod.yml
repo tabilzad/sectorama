@@ -20,10 +20,12 @@ services:
       - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
       - INFLUXDB_ORG=sectorama
       - INFLUXDB_BUCKET=sectorama
-      - SMART_POLL_INTERVAL_MINUTES=${SMART_POLL_INTERVAL_MINUTES:-5}
-      - BENCHMARK_NUM_POINTS=${BENCHMARK_NUM_POINTS:-11}
+      # Optional pins. Leave blank to manage these from the Settings page; a value here locks the field there.
+      - SMART_POLL_INTERVAL_MINUTES=${SMART_POLL_INTERVAL_MINUTES:-}
+      - SMART_POLL_CONCURRENCY=${SMART_POLL_CONCURRENCY:-}
+      - BENCHMARK_NUM_POINTS=${BENCHMARK_NUM_POINTS:-}
+      - TEMPERATURE_ALERT_THRESHOLD_CELSIUS=${TEMPERATURE_ALERT_THRESHOLD_CELSIUS:-}
       - DISK_DISCOVERY_MOCK=false
-      - TEMPERATURE_ALERT_THRESHOLD_CELSIUS=${TEMPERATURE_ALERT_THRESHOLD_CELSIUS:-50}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8888/api/v1/health || exit 1"]
       interval: 30s

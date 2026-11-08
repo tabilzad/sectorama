@@ -8,7 +8,7 @@ import {
   createRun, executeBenchmark, getRunDetail, getDriveSeries, deleteRun, purgeAllRuns, BenchmarkBusyError,
 } from '../../services/benchmarkEngine.js';
 import { getActiveBenchmark } from '../../services/benchmarkLock.js';
-import { config } from '../../config.js';
+import { getRuntimeSettings } from '../../services/settingsService.js';
 import {
   driveIdParams, runParams, numPoints, dashboardPreset, positiveInt, nullableShortText, fluxTimeBound,
 } from '../schemas.js';
@@ -235,7 +235,7 @@ export async function driveRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const driveId   = req.params.driveId;
-      const numPoints = req.body.numPoints ?? config.benchmark.numPoints;
+      const numPoints = req.body.numPoints ?? getRuntimeSettings().benchmark.defaultNumPoints;
 
       if (!(await driveExists(driveId))) return reply.status(404).send({ error: 'Drive not found' });
 

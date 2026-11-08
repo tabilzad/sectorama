@@ -10,7 +10,7 @@ import {
   alertEvents,
   alertDeliveries,
 } from '../../db/schema.js';
-import { config } from '../../config.js';
+import { getRuntimeSettings } from '../settingsService.js';
 import { evaluateAlerts } from './alertEvaluator.js';
 import { createChannel } from './channelFactory.js';
 import { sendPushToAll } from '../pushService.js';
@@ -329,7 +329,7 @@ export async function evaluateAndNotifyNewChannel(
     const thresholdRow = await db.query.driveAlertThresholds.findFirst({
       where: eq(driveAlertThresholds.driveId, driveRow.driveId),
     });
-    const threshold = thresholdRow?.temperatureThresholdCelsius ?? config.notifications.defaultTempThresholdCelsius;
+    const threshold = thresholdRow?.temperatureThresholdCelsius ?? getRuntimeSettings().temperature.alertCelsius;
 
     // Reconstruct a SmartReading from the cache snapshot
     let attributes: SmartReading['attributes'] = [];
@@ -381,7 +381,7 @@ export async function evaluateAndNotify(driveId: number, newReading: SmartReadin
   const thresholdRow = await db.query.driveAlertThresholds.findFirst({
     where: eq(driveAlertThresholds.driveId, driveId),
   });
-  const threshold = thresholdRow?.temperatureThresholdCelsius ?? config.notifications.defaultTempThresholdCelsius;
+  const threshold = thresholdRow?.temperatureThresholdCelsius ?? getRuntimeSettings().temperature.alertCelsius;
 
   const alerts = evaluateAlerts(
     { driveId, serial: driveRow.serialNumber, model: driveRow.model },
