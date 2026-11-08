@@ -1,0 +1,31 @@
+# Keep the build context small: the Dockerfile copies package manifests and
+# source directories explicitly, so nothing below is needed inside the image.
+
+# Version control and editor state
+.git
+.github
+.idea
+.vscode
+
+# Dependencies and build output (installed and compiled inside the image)
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+
+# Local configuration and secrets (never bake these in)
+.env
+.env.*
+!.env.example
+
+# Local databases, logs, and tooling
+*.db
+*.db-wal
+*.db-shm
+*.log
+publish-local.sh
+docker-compose*.yml
+
+# Documentation and images
+*.md
+imgs
