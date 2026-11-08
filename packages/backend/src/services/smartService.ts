@@ -311,9 +311,14 @@ async function writeSmartToInflux(driveRow: DriveRow, reading: SmartReading): Pr
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Read fresh SMART data from the device and update the SQLite cache.
- * Does NOT write to InfluxDB and does NOT broadcast a WS event.
- * Use this for warm-up / cache population, not for HTTP GET requests.
+ * Read fresh SMART data from the device, evaluate alerts against the persisted
+ * cache, then update the cache. Does NOT write to InfluxDB and does NOT
+ * broadcast a WS event. Use this for warm-up / cache population.
+ *
+ * Alerts must be evaluated here too: the cache survives restarts, so a drive
+ * that failed or overheated while the service was down is only ever seen as
+ * a transition by this first read. Overwriting the cache without evaluating
+ * would silently baseline the fault and no scheduled poll would ever report it.
  */
 export async function refreshSmartForDrive(driveId: number): Promise<SmartReading | null> {
   const db = getDb();
@@ -321,6 +326,7 @@ export async function refreshSmartForDrive(driveId: number): Promise<SmartReadin
   if (!driveRow) return null;
 
   const reading = await readSmartFromDrive(driveId, driveRow);
+  await evaluateAndNotify(driveId, reading);   // reads old cache before update
   await updateSmartCache(driveId, reading);
   return reading;
 }
