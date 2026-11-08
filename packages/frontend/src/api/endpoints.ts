@@ -24,6 +24,7 @@ export const API = {
     subscriptions: '/notifications/subscriptions',
     subscription:  (id: number) => `/notifications/subscriptions/${id}`,
     thresholds:    '/notifications/thresholds',
+    history:       '/notifications/history',
     threshold:     (driveId: number) => `/notifications/thresholds/${driveId}`,
   },
   push: {
