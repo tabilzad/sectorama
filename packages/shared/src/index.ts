@@ -64,7 +64,13 @@ export interface SmartAttribute {
     worst: number;
     threshold: number;
     rawValue: number;
+    /** Device-declared failure (ATA when_failed; NVMe critical_warning / spare below threshold). */
     failing: boolean;
+    /**
+     * Advisory only — worth attention but NOT a failure (e.g. NVMe endurance
+     * ≥ 90 % used, media errors present). Rendered amber, never red.
+     */
+    warn?: boolean;
 }
 
 export interface SmartReading {
