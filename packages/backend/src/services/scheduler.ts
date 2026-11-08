@@ -5,6 +5,7 @@ import { benchmarkSchedules, drives } from '../db/schema.js';
 import { createRun, executeBenchmark } from './benchmarkEngine.js';
 import { getActiveBenchmark } from './benchmarkLock.js';
 import { notifyBenchmarkComplete } from './notifications/notificationService.js';
+import { checkDrivePresence } from './drivePresence.js';
 import { config } from '../config.js';
 
 // Map: scheduleId → ScheduledTask
@@ -107,6 +108,13 @@ export function initSmartPoller(): void {
     : `30 */${intervalMinutes} * * * *`;
 
   schedule(cronExpr, async () => {
+    // Presence first: a drive that vanished must not be polled, and one that
+    // returned must be registered before its SMART data is read.
+    try {
+      await checkDrivePresence();
+    } catch (err) {
+      console.error('[scheduler] Drive presence check failed:', err);
+    }
     try {
       const { pollAllSmart } = await import('./smartService.js');
       await pollAllSmart();
