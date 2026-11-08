@@ -10,6 +10,8 @@ import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
 import { deriveHealth } from '../utils/health.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
+import { getSmartPollingSettings } from './settingsService.js';
 import type { SmartReading, SmartAttribute, SmartUpdatedEvent } from '@sectorama/shared';
 import type { DriveRow, SmartCacheRow } from '../db/schema.js';
 
@@ -28,7 +30,10 @@ interface AtaAttribute {
 }
 
 interface SmartctlXallResult {
-  smartctl?: { exit_status?: number };
+  smartctl?: {
+    exit_status?: number;
+    messages?: Array<{ string: string; severity: string }>;
+  };
   smart_status?: { passed?: boolean };
   temperature?: { current?: number };
   power_on_time?: { hours?: number };
@@ -64,13 +69,46 @@ interface SmartctlXallResult {
 
 const SMARTCTL_TIMEOUT_MS = 30_000;
 
-async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> {
+/** smartctl exit-status bit 1 (value 2): device open failed, no IDENTIFY, or device in a low-power mode. */
+const SMARTCTL_EXIT_LOW_POWER = 2;
+
+/**
+ * True when smartctl declined to query the drive because it was asleep.
+ * With --nocheck=standby smartctl exits with bit 1 set and reports
+ * "Device is in STANDBY mode, exit(2)" (or SLEEP) in its messages. The bit
+ * alone is not enough: it also covers "device open failed", which must still
+ * surface as an error.
+ */
+export function isStandbyResult(result: SmartctlXallResult, exitCode: number | undefined): boolean {
+  const status = result.smartctl?.exit_status ?? exitCode ?? 0;
+  if ((status & SMARTCTL_EXIT_LOW_POWER) === 0) return false;
+  const messages = result.smartctl?.messages ?? [];
+  return messages.some(m => /\b(STANDBY|SLEEP|low-power)\b/i.test(m.string));
+}
+
+/** Options that apply to one SMART read. */
+export interface PollOptions {
+  /** Pass --nocheck=standby so a sleeping drive is skipped instead of woken. */
+  skipStandby: boolean;
+}
+
+/**
+ * Run smartctl --xall for one device. Resolves to the parsed JSON, or to
+ * 'standby' when the drive was skipped because it is asleep.
+ */
+async function runSmartctlXall(devicePath: string, opts: PollOptions): Promise<SmartctlXallResult | 'standby'> {
+  const args = ['--xall', '--json'];
+  // --nocheck=standby makes smartctl exit before touching a drive that is in
+  // SLEEP or STANDBY, so polling is never the reason a disk spins up.
+  if (opts.skipStandby) args.push('--nocheck=standby');
+  args.push(devicePath);
+
   // Use Promise.race rather than the execFile timeout option: the timeout option
   // sends SIGTERM but if smartctl is in kernel D-state (uninterruptible I/O wait
   // on a slow/unresponsive drive) SIGTERM is silently ignored and the process
   // never exits, so the promise never settles. Promise.race rejects after
   // SMARTCTL_TIMEOUT_MS regardless of what the child process does.
-  const execPromise = execFileAsync('smartctl', ['--xall', '--json', devicePath]);
+  const execPromise = execFileAsync('smartctl', args);
 
   let timer!: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -87,13 +125,22 @@ async function runSmartctlXall(devicePath: string): Promise<SmartctlXallResult> 
   } catch (err: unknown) {
     clearTimeout(timer);
     const e = err as { stdout?: string; stderr?: string; code?: number };
+
+    // smartctl exits non-zero for warnings (failing attributes, standby skip)
+    // and still prints its JSON; parse it before deciding what happened.
+    let parsed: SmartctlXallResult | null = null;
+    if (e.stdout) {
+      try { parsed = JSON.parse(e.stdout) as SmartctlXallResult; } catch { /* not JSON */ }
+    }
+    if (parsed && opts.skipStandby && isStandbyResult(parsed, e.code)) {
+      return 'standby';
+    }
+
     console.error(
-      `[smartService] smartctl --xall --json ${devicePath} failed: ${(err as Error).message ?? `code=${e.code ?? '?'}`}`,
+      `[smartService] smartctl ${args.join(' ')} failed: ${(err as Error).message ?? `code=${e.code ?? '?'}`}`,
       e.stderr ? `\n  stderr: ${e.stderr.trim()}` : '',
     );
-    if (e.stdout) {
-      try { return JSON.parse(e.stdout) as SmartctlXallResult; } catch { /* ignore */ }
-    }
+    if (parsed) return parsed;
     throw err;
   }
 }
@@ -169,8 +216,11 @@ function parseNvmeAttributes(
 
 // ─── Private pipeline stages ─────────────────────────────────────────────────
 
-/** Stage 1: Read SMART data from the device (or return mock data). Pure I/O, no side effects. */
-async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<SmartReading> {
+/**
+ * Stage 1: Read SMART data from the device (or return mock data). Pure I/O, no side effects.
+ * Resolves to null when the drive was skipped because it is in standby.
+ */
+async function readSmartFromDrive(driveId: number, driveRow: DriveRow, opts: PollOptions): Promise<SmartReading | null> {
   if (config.disk.mock) {
     const base = driveRow.devicePath.endsWith('0') ? 38
                : driveRow.devicePath.endsWith('1') ? 32 : 40;
@@ -188,7 +238,8 @@ async function readSmartFromDrive(driveId: number, driveRow: DriveRow): Promise<
     };
   }
 
-  const result = await runSmartctlXall(driveRow.devicePath);
+  const result = await runSmartctlXall(driveRow.devicePath, opts);
+  if (result === 'standby') return null;
 
   const temperature     = result.temperature?.current ?? null;
   const powerOnHours    = result.power_on_time?.hours ?? null;
@@ -336,13 +387,19 @@ async function writeSmartToInflux(driveRow: DriveRow, reading: SmartReading): Pr
  * that failed or overheated while the service was down is only ever seen as
  * a transition by this first read. Overwriting the cache without evaluating
  * would silently baseline the fault and no scheduled poll would ever report it.
+ *
+ * Resolves to null when the drive is unknown or was skipped because it is in standby.
  */
-export async function refreshSmartForDrive(driveId: number): Promise<SmartReading | null> {
+export async function refreshSmartForDrive(
+  driveId: number,
+  opts: PollOptions = getSmartPollingSettings(),
+): Promise<SmartReading | null> {
   const db = getDb();
   const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
   if (!driveRow) return null;
 
-  const reading = await readSmartFromDrive(driveId, driveRow);
+  const reading = await readSmartFromDrive(driveId, driveRow, opts);
+  if (!reading) return null;
   await evaluateAndNotify(driveId, reading);   // reads old cache before update
   await updateSmartCache(driveId, reading);
   return reading;
@@ -382,13 +439,19 @@ export async function getAllCachedSmartEvents(): Promise<SmartUpdatedEvent[]> {
 /**
  * Full scheduled poll for one drive: read → cache → InfluxDB → broadcast.
  * Only call this from the scheduler. This is the sole writer to InfluxDB for SMART data.
+ * Resolves to null when the drive is unknown or was skipped because it is in standby;
+ * a skipped drive keeps its cached reading and gets no InfluxDB point for this tick.
  */
-export async function scheduledSmartPoll(driveId: number): Promise<SmartReading | null> {
+export async function scheduledSmartPoll(
+  driveId: number,
+  opts: PollOptions = getSmartPollingSettings(),
+): Promise<SmartReading | null> {
   const db = getDb();
   const driveRow = await db.query.drives.findFirst({ where: eq(drives.driveId, driveId) });
   if (!driveRow) return null;
 
-  const reading = await readSmartFromDrive(driveId, driveRow);
+  const reading = await readSmartFromDrive(driveId, driveRow, opts);
+  if (!reading) return null;
   await evaluateAndNotify(driveId, reading);   // reads old cache before update
   await updateSmartCache(driveId, reading);
   await writeSmartToInflux(driveRow, reading);
@@ -406,40 +469,50 @@ export async function scheduledSmartPoll(driveId: number): Promise<SmartReading 
 }
 
 /**
- * Warm up the SQLite cache for all connected drives on startup (parallel).
+ * Run one read per connected drive, a few drives at a time (SMART_POLL_CONCURRENCY),
+ * with the standby setting read once for the whole sweep. One summary line is
+ * logged instead of a line per sleeping drive.
+ */
+async function sweepConnectedDrives(
+  label: string,
+  readOne: (driveId: number, opts: PollOptions) => Promise<SmartReading | null>,
+): Promise<void> {
+  const db = getDb();
+  const connectedDrives = await db.query.drives.findMany({
+    where: eq(drives.isConnected, true),
+  });
+  if (connectedDrives.length === 0) return;
+
+  const opts    = getSmartPollingSettings();
+  const results = await mapWithConcurrency(connectedDrives, config.smart.pollConcurrency, drive =>
+    readOne(drive.driveId, opts),
+  );
+
+  let polled = 0, standby = 0, failed = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      failed += 1;
+      console.error(`[smartService] ${label} failed for ${connectedDrives[i]!.devicePath}:`, r.reason);
+    } else if (r.value === null) {
+      standby += 1;
+    } else {
+      polled += 1;
+    }
+  });
+  console.log(`[smartService] ${label}: ${polled} polled, ${standby} in standby (skipped), ${failed} failed`);
+}
+
+/**
+ * Warm up the SQLite cache for all connected drives on startup.
  * Does NOT write to InfluxDB — the scheduler's first tick handles that.
  */
 export async function refreshAllSmart(): Promise<void> {
-  const db = getDb();
-  const connectedDrives = await db.query.drives.findMany({
-    where: eq(drives.isConnected, true),
-  });
-  const results = await Promise.allSettled(
-    connectedDrives.map(drive => refreshSmartForDrive(drive.driveId)),
-  );
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]!;
-    if (r.status === 'rejected') {
-      console.error(`[smartService] SMART cache warm-up failed for ${connectedDrives[i]!.devicePath}:`, r.reason);
-    }
-  }
+  await sweepConnectedDrives('SMART cache warm-up', refreshSmartForDrive);
 }
 
-/** Run a full scheduled poll for all connected drives (parallel). */
+/** Run a full scheduled poll for all connected drives. */
 export async function pollAllSmart(): Promise<void> {
-  const db = getDb();
-  const connectedDrives = await db.query.drives.findMany({
-    where: eq(drives.isConnected, true),
-  });
-  const results = await Promise.allSettled(
-    connectedDrives.map(drive => scheduledSmartPoll(drive.driveId)),
-  );
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]!;
-    if (r.status === 'rejected') {
-      console.error(`[smartService] SMART poll failed for ${connectedDrives[i]!.devicePath}:`, r.reason);
-    }
-  }
+  await sweepConnectedDrives('SMART poll', scheduledSmartPoll);
 }
 
 /** Return the cached SMART snapshot for a drive from SQLite (synchronous). */

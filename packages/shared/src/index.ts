@@ -418,3 +418,13 @@ export interface StorageOverview {
     classes: StorageClassSummary[];  // HDD, SSD, NVMe, Unknown — only types that have drives or filesystems
     unattributed: UnattributedStorage | null;
 }
+
+// ─── SMART polling settings ───────────────────────────────────────────────────
+
+export interface SmartPollingSettings {
+    /**
+     * Skip drives that are in standby or sleep so a poll never spins them up.
+     * Their cached reading is kept until they wake. Default: true.
+     */
+    skipStandby: boolean;
+}
