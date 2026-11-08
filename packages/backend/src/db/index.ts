@@ -125,6 +125,33 @@ export function initDb(): void {
       custom_label  TEXT,
       display_order INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS alert_events (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      type           TEXT    NOT NULL,
+      drive_id       INTEGER REFERENCES drives(drive_id) ON DELETE SET NULL,
+      drive_serial   TEXT    NOT NULL,
+      drive_model    TEXT    NOT NULL,
+      message        TEXT    NOT NULL,
+      value          REAL,
+      threshold      REAL,
+      attribute      TEXT,
+      previous_value REAL,
+      created_at     TEXT    NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_alert_events_created ON alert_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS alert_deliveries (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_id        INTEGER NOT NULL REFERENCES alert_events(id) ON DELETE CASCADE,
+      channel_id      INTEGER NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+      status          TEXT    NOT NULL DEFAULT 'pending',
+      attempts        INTEGER NOT NULL DEFAULT 0,
+      last_error      TEXT,
+      next_attempt_at TEXT,
+      sent_at         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_alert_deliveries_due ON alert_deliveries(status, next_attempt_at);
   `);
 
   // Additive migration: add zone columns to pre-existing databases.

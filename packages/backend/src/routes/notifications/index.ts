@@ -9,7 +9,7 @@ import {
 } from '../../db/schema.js';
 import { rowToChannel, rowToSub } from '../../db/mappers.js';
 import { createChannel } from '../../services/notifications/channelFactory.js';
-import { evaluateAndNotifyNewChannel } from '../../services/notifications/notificationService.js';
+import { evaluateAndNotifyNewChannel, getAlertHistory } from '../../services/notifications/notificationService.js';
 import {
   idParams, driveIdParams, positiveInt, shortText, alertType, channelType, celsius, nullableCelsius,
 } from '../schemas.js';
@@ -18,7 +18,11 @@ import type {
   ChannelType,
   AlertType,
   Alert,
+  AlertHistoryEntry,
 } from '@sectorama/shared';
+
+/** Alert families a new channel is subscribed to out of the box: every health signal, no reports. */
+const DEFAULT_SUBSCRIPTIONS: AlertType[] = ['smart_error', 'smart_attribute', 'temperature', 'drive_missing'];
 
 interface IdParams      { id: number }
 interface DriveIdParams { driveId: number }
@@ -119,11 +123,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
       const newId = Number(result.lastInsertRowid);
 
-      // Auto-subscribe to all alert types so the channel is ready out of the box
-      await db.insert(notificationSubscriptions).values([
-        { channelId: newId, alertType: 'smart_error' as AlertType },
-        { channelId: newId, alertType: 'temperature' as AlertType },
-      ]);
+      // Auto-subscribe to the health alert families so the channel is ready out of the box
+      await db.insert(notificationSubscriptions).values(
+        DEFAULT_SUBSCRIPTIONS.map(alertType => ({ channelId: newId, alertType })),
+      );
 
       const row = await db.query.notificationChannels.findFirst({
         where: eq(notificationChannels.id, newId),
@@ -228,6 +231,24 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         const message = err instanceof Error ? err.message : String(err);
         return reply.status(502).send({ error: `Delivery failed: ${message}` });
       }
+    },
+  );
+
+  // ── History ───────────────────────────────────────────────────────────────
+
+  // GET /api/v1/notifications/history[?limit=50] — recent alerts with delivery state per channel
+  app.get<{ Querystring: { limit: number }; Reply: AlertHistoryEntry[] }>(
+    '/api/v1/notifications/history',
+    {
+      schema: {
+        querystring: {
+          type:       'object',
+          properties: { limit: { type: 'integer', minimum: 1, maximum: 500, default: 50 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      return reply.send(await getAlertHistory(req.query.limit));
     },
   );
 

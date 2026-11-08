@@ -178,11 +178,18 @@ Sectorama can push alerts to external services when a drive's health or temperat
 | Type                 | Fires when…                                                              |
 |----------------------|--------------------------------------------------------------------------|
 | `smart_error`        | SMART self-assessment transitions from passing → failing                 |
-| `temperature`        | Drive temperature transitions from at-or-below the threshold to above it |
+| `smart_attribute`    | A predictive counter grows (reallocated, pending or uncorrectable sectors; NVMe media errors), an attribute starts reporting failure (ATA `when_failed`, NVMe critical warning or spare below threshold), or an advisory attribute needs attention (e.g. NVMe wear ≥ 90 %) |
+| `temperature`        | Drive temperature transitions from at-or-below the threshold to above it; the recovery below it is sent to the same channels |
+| `drive_missing`      | A registered drive is no longer listed by the host (checked before every SMART poll and at startup); its return is sent to the same channels |
 | `benchmark_complete` | A scheduled benchmark run finishes (completed or failed), with a summary report |
 
 Alerts are **transition-only**: they fire once when a condition first occurs and are silent until the condition clears
 and re-triggers. This prevents alert storms on every poll.
+
+Every alert is recorded in the **alert history** (Notifications page, `GET /api/v1/notifications/history`) together
+with the delivery state per channel. A delivery that fails is retried with increasing delays (1 min, 5 min, 15 min,
+1 h, 6 h) before it is given up, and deliveries left pending by a restart are retried on startup, so a webhook outage
+does not swallow a transition-only alert.
 
 ### Channel types
 

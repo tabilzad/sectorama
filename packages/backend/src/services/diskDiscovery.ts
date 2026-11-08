@@ -6,6 +6,7 @@ import { getDb } from '../db';
 import { drives, driveDisplayPrefs, settings } from '../db/schema.js';
 import { config } from '../config.js';
 import type { DriveSummary, DriveType } from '@sectorama/shared';
+import type { DriveRow } from '../db/schema.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +83,13 @@ const MOCK_DRIVES = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Device paths the last full scan listed but could not register (no serial,
+ * or smartctl --info failed). The presence check ignores them so they do not
+ * trigger a full rescan on every poll.
+ */
+const unregisteredDevicePaths = new Set<string>();
+
 async function runSmartctl(args: string[]): Promise<unknown> {
   try {
     const { stdout } = await execFileAsync('smartctl', args);
@@ -133,6 +141,7 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
   const devices = scanResult.devices ?? [];
   console.log(`[diskDiscovery] smartctl --scan found ${devices.length} device(s):`,
     devices.map(d => `${d.name} (type=${d.type})`).join(', ') || 'none');
+  unregisteredDevicePaths.clear();
 
   const discovered: DiscoveredDrive[] = [];
   for (const dev of devices) {
@@ -142,6 +151,7 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
       const serial = info.serial_number;
       if (!serial) {
         console.log(`[diskDiscovery] Skipping ${dev.name}: no serial number (virtual/unsupported device)`);
+        unregisteredDevicePaths.add(dev.name);
         continue;
       }
 
@@ -184,6 +194,7 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
         physicalSectorSize: info.physical_block_size ?? info.logical_block_size ?? null,
       });
     } catch (err) {
+      unregisteredDevicePaths.add(dev.name);
       const e = err as { code?: number; stderr?: string; message?: string };
       console.error(
         `[diskDiscovery] Skipping ${dev.name} (exit code=${e.code ?? '?'}): ${e.message ?? String(err)}`,
@@ -195,11 +206,35 @@ export async function scanDisks(): Promise<DiscoveredDrive[]> {
   return discovered;
 }
 
-/** Upsert discovered drives into SQLite, mark missing ones as disconnected */
-export async function registerDrives(discovered: DiscoveredDrive[]): Promise<void> {
+/**
+ * Device paths the host currently lists, as `smartctl --scan` reports them,
+ * minus devices the last full scan could not register. Cheap: no device is
+ * opened, so sleeping drives stay asleep.
+ */
+export async function scanDevicePaths(): Promise<Set<string>> {
+  if (config.disk.mock) return new Set(MOCK_DRIVES.map(d => d.devicePath));
+  const scanResult = await runSmartctl(['--scan', '--json']) as SmartctlScanResult;
+  const paths = new Set((scanResult.devices ?? []).map(d => d.name));
+  for (const ignored of unregisteredDevicePaths) paths.delete(ignored);
+  return paths;
+}
+
+/** What a registration pass changed, so callers can broadcast and alert on it. */
+export interface DriveChanges {
+  /** Never seen before. */
+  added:    DriveRow[];
+  /** Known but marked disconnected until now. */
+  returned: DriveRow[];
+  /** Connected until now, absent from this scan. */
+  removed:  DriveRow[];
+}
+
+/** Upsert discovered drives into SQLite, mark missing ones as disconnected, and report the difference. */
+export async function registerDrives(discovered: DiscoveredDrive[]): Promise<DriveChanges> {
   const db = getDb();
   const now = new Date().toISOString();
   const foundSerials = new Set(discovered.map(d => d.serialNumber));
+  const changes: DriveChanges = { added: [], returned: [], removed: [] };
 
   // Upsert each discovered drive
   for (const d of discovered) {
@@ -208,6 +243,7 @@ export async function registerDrives(discovered: DiscoveredDrive[]): Promise<voi
     });
 
     if (existing) {
+      if (!existing.isConnected) changes.returned.push(existing);
       await db.update(drives)
         .set({
           devicePath:         d.devicePath,
@@ -225,7 +261,7 @@ export async function registerDrives(discovered: DiscoveredDrive[]): Promise<voi
         })
         .where(eq(drives.serialNumber, d.serialNumber));
     } else {
-      await db.insert(drives).values({
+      const [inserted] = await db.insert(drives).values({
         serialNumber:       d.serialNumber,
         devicePath:         d.devicePath,
         vendor:             d.vendor,
@@ -240,7 +276,8 @@ export async function registerDrives(discovered: DiscoveredDrive[]): Promise<voi
         firstSeen:          now,
         lastSeen:           now,
         isConnected:        true,
-      });
+      }).returning();
+      if (inserted) changes.added.push(inserted);
     }
   }
 
@@ -251,8 +288,11 @@ export async function registerDrives(discovered: DiscoveredDrive[]): Promise<voi
       await db.update(drives)
         .set({ isConnected: false })
         .where(eq(drives.driveId, row.driveId));
+      changes.removed.push(row);
     }
   }
+
+  return changes;
 }
 
 /** Get a drive summary (no SMART data — use smartCache for that) */

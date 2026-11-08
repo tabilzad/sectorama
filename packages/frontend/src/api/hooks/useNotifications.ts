@@ -7,7 +7,20 @@ import type {
   DriveAlertThreshold,
   ChannelType,
   AlertType,
+  AlertHistoryEntry,
 } from '@sectorama/shared';
+
+// ── Alert history ─────────────────────────────────────────────────────────────
+
+export function useAlertHistory(limit = 50) {
+  return useQuery<AlertHistoryEntry[]>({
+    queryKey: ['alert-history', limit],
+    queryFn:  () =>
+      api.get<AlertHistoryEntry[]>(API.notifications.history, { params: { limit } }).then(r => r.data),
+    // Deliveries change state as the retry worker runs, independent of any live event.
+    refetchInterval: 60_000,
+  });
+}
 
 // ── Channels ──────────────────────────────────────────────────────────────────
 
