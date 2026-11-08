@@ -92,6 +92,44 @@ export interface SmartAttributeHistory {
     points: Array<{ timestamp: string; value: number; rawValue: number }>;
 }
 
+// ─── Drive health ─────────────────────────────────────────────────────────────
+
+/** Pending sectors above this count turn a drive's health to 'warning'. */
+export const PENDING_SECTORS_WARNING_THRESHOLD = 5;
+
+/** The fields health is derived from; satisfied by a SmartReading and by a SMART cache row. */
+export interface HealthSignals {
+    healthPassed: boolean | null | undefined;
+    reallocatedSectors: number | null | undefined;
+    pendingSectors: number | null | undefined;
+    uncorrectableErrors: number | null | undefined;
+    attributes?: ReadonlyArray<Pick<SmartAttribute, 'failing' | 'warn'>> | null;
+}
+
+/**
+ * The single health rule, shared by the drive list, the live-feed events, the
+ * stats counters and the drive page so they can never disagree.
+ *
+ *   failed   the device's overall SMART self-assessment is FAILED
+ *   warning  the device still passes but something deserves attention: a
+ *            growth counter above its threshold, an attribute the device flags
+ *            as failing (e.g. ATA "in the past"), or an advisory attribute
+ *            (NVMe wear ≥ 90 %, media errors)
+ *   ok       passes with nothing raised
+ *   unknown  no reading yet
+ */
+export function deriveHealth(s: HealthSignals): DriveHealth {
+    if (s.healthPassed === false) return 'failed';
+    const counters =
+        (s.reallocatedSectors ?? 0) > 0 ||
+        (s.pendingSectors ?? 0) > PENDING_SECTORS_WARNING_THRESHOLD ||
+        (s.uncorrectableErrors ?? 0) > 0;
+    const flagged = s.attributes?.some(a => a.failing || a.warn === true) ?? false;
+    if (counters || flagged) return 'warning';
+    if (s.healthPassed === true) return 'ok';
+    return 'unknown';
+}
+
 // ─── Benchmarks ──────────────────────────────────────────────────────────────
 
 export type BenchmarkStatus = 'pending' | 'running' | 'completed' | 'failed';

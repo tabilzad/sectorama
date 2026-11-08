@@ -9,7 +9,7 @@ import { fluxTime } from '../db/flux.js';
 import { broadcast } from '../ws/liveFeed.js';
 import { config } from '../config.js';
 import { evaluateAndNotify } from './notifications/notificationService.js';
-import { deriveHealth } from '../utils/health.js';
+import { deriveHealth } from '@sectorama/shared';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { getSmartPollingSettings } from './settingsService.js';
 import type { SmartReading, SmartAttribute, SmartUpdatedEvent } from '@sectorama/shared';
@@ -426,12 +426,7 @@ export async function getAllCachedSmartEvents(): Promise<SmartUpdatedEvent[]> {
   const rows = await db.query.smartCache.findMany();
   return rows.map(row => {
     const reading = smartCacheRowToReading(row);
-    const health  = deriveHealth(
-      row.healthPassed,
-      row.reallocatedSectors,
-      row.pendingSectors,
-      row.uncorrectableErrors,
-    );
+    const health  = deriveHealth(reading);
     return { type: 'smart_updated' as const, driveId: row.driveId, health, temperature: row.temperature ?? null, reading };
   });
 }
@@ -456,12 +451,7 @@ export async function scheduledSmartPoll(
   await updateSmartCache(driveId, reading);
   await writeSmartToInflux(driveRow, reading);
 
-  const health = deriveHealth(
-    reading.healthPassed,
-    reading.reallocatedSectors,
-    reading.pendingSectors,
-    reading.uncorrectableErrors,
-  );
+  const health = deriveHealth(reading);
   // Broadcast the full reading so connected clients can update without an extra HTTP round-trip
   broadcast({ type: 'smart_updated', driveId, health, temperature: reading.temperature, reading });
 

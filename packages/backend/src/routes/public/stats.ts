@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq, count } from 'drizzle-orm';
 import { getDb } from '../../db';
 import { drives, benchmarkRuns, smartCache } from '../../db/schema.js';
-import { deriveHealth } from '../../utils/health.js';
+import { healthFromCache } from '../../utils/smartCache.js';
 import { getStorageOverview } from '../../services/storage/storageService.js';
 import type { SystemStats, StorageOverview } from '@sectorama/shared';
 
@@ -25,6 +25,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
         reallocatedSectors:  smartCache.reallocatedSectors,
         pendingSectors:      smartCache.pendingSectors,
         uncorrectableErrors: smartCache.uncorrectableErrors,
+        attributesJson:      smartCache.attributesJson,
       })
       .from(drives)
       .leftJoin(smartCache, eq(smartCache.driveId, drives.driveId));
@@ -32,12 +33,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
     let healthy = 0, warning = 0, failed = 0;
     for (const row of driveWithCache) {
       if (!row.isConnected) continue;
-      const health = deriveHealth(
-        row.healthPassed,
-        row.reallocatedSectors,
-        row.pendingSectors,
-        row.uncorrectableErrors,
-      );
+      const health = healthFromCache(row);
       if (health === 'failed')  { failed++;  continue; }
       if (health === 'warning') { warning++; continue; }
       if (health === 'ok')      { healthy++;            }

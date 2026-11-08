@@ -169,6 +169,19 @@ shows raw capacity per class and explains how to enable usage.
 
 ---
 
+## Drive health
+
+The badge on a drive card, the stats counters and the header on the drive page all use the same rule:
+
+| Badge     | Meaning                                                                                                                                              |
+|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `FAILED`  | The drive's overall SMART self-assessment is FAILED                                                                                                  |
+| `WARNING` | The drive still passes, but something deserves attention: reallocated or uncorrectable sectors (NVMe media errors), more than 5 pending sectors, an attribute the device flags as failing (e.g. ATA "in the past"), or an advisory attribute such as NVMe wear ≥ 90 % |
+| `PASSED`  | Passes with nothing raised                                                                                                                           |
+| `UNKNOWN` | No SMART reading yet                                                                                                                                 |
+
+---
+
 ## Notifications
 
 Sectorama can push alerts to external services when a drive's health or temperature crosses a threshold.

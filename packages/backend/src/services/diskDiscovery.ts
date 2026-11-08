@@ -6,7 +6,8 @@ import { getDb } from '../db';
 import { drives, driveDisplayPrefs, settings } from '../db/schema.js';
 import { config } from '../config.js';
 import type { DriveSummary, DriveType } from '@sectorama/shared';
-import type { DriveRow } from '../db/schema.js';
+import type { DriveRow, SmartCacheRow } from '../db/schema.js';
+import { healthFromCache } from '../utils/smartCache.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -334,7 +335,7 @@ export async function getDriveSummaries(): Promise<DriveSummary[]> {
   });
 
   return rows.map(row => {
-    const sc = (row as typeof row & { smartCache?: { healthPassed?: boolean | null; temperature?: number | null; polledAt?: string | null } }).smartCache;
+    const sc = (row as typeof row & { smartCache?: SmartCacheRow | null }).smartCache;
     const prefs = prefsMap.get(row.driveId);
     return {
       driveId:          row.driveId,
@@ -345,9 +346,8 @@ export async function getDriveSummaries(): Promise<DriveSummary[]> {
       capacity:         row.capacity,
       type:             row.type as import('@sectorama/shared').DriveType,
       isConnected:      row.isConnected,
-      health:           sc?.healthPassed === false ? 'failed'
-                      : sc?.healthPassed === true  ? 'ok'
-                      : 'unknown' as import('@sectorama/shared').DriveHealth,
+      // Same rule as the live feed and the stats counters; see deriveHealth in @sectorama/shared.
+      health:           healthFromCache(sc),
       temperature:      sc?.temperature ?? null,
       lastSmartPoll:    sc?.polledAt ?? null,
       lastBenchmarkRun: null,

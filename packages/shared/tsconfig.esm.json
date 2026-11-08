@@ -1,0 +1,11 @@
+{
+  // ESM build, consumed by Vite for the browser bundle. Declarations come from the CommonJS build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "./dist/esm"
+  }
+}
