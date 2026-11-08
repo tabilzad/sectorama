@@ -33,6 +33,7 @@ export const API = {
   },
   settings: {
     communitySharing: '/settings/community-sharing',
+    smartPolling:     '/settings/smart-polling',
   },
   stats:   '/stats',
   storage: '/storage',

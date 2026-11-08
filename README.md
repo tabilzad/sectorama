@@ -49,7 +49,9 @@
   middle-of-disk region to eliminate outer-track bias. Latency percentiles (P50 / P95 / P99 / P99.9) are
   recorded per profile. All benchmark I/O is strictly read-only, and only one benchmark runs at a time
   so concurrent jobs can never distort each other's results
-- **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time
+- **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time. Polls skip
+  drives that are in standby so monitoring never spins a disk up (switchable in Settings), and query only a
+  few drives at a time
 - **Benchmark schedules** — cron-based per-drive or global schedules
 - **Notifications** — alert channels (Webhook, Slack) with per-alert-type subscriptions; transition-only firing (once on
   condition onset, silent until it clears and re-triggers); per-drive temperature threshold overrides
@@ -132,6 +134,7 @@ npm test            # backend unit + API validation tests
 | `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
 | `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
 | `SMART_POLL_INTERVAL_MINUTES`         | `5`                     | SMART polling interval                                            |
+| `SMART_POLL_CONCURRENCY`              | `4`                     | Drives queried at the same time during a poll sweep               |
 | `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
 | `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
