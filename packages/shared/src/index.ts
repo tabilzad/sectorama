@@ -378,3 +378,37 @@ export interface CommunityReport {
     profileResults: ProfileResult[];
     positionCurve: BenchmarkPoint[];
 }
+
+// ─── Storage overview ─────────────────────────────────────────────────────────
+
+/** Where filesystem usage figures came from. */
+export type StorageUsageSource = 'unraid' | 'linux' | 'mock' | 'none';
+
+export interface StorageClassSummary {
+    type: DriveType;
+    /** Registered drives of this type that are currently connected. */
+    driveCount: number;
+    /** Sum of raw device capacity for those drives (bytes). */
+    rawCapacityBytes: number;
+    /** Mounted filesystems attributed to this drive type; 0 when nothing was measured. */
+    filesystemCount: number;
+    /** Filesystem totals in bytes, summed over attributed filesystems; null when none measured. */
+    fsTotalBytes: number | null;
+    fsUsedBytes: number | null;
+    fsFreeBytes: number | null;
+}
+
+/** Filesystems whose backing drive type could not be determined (e.g. pools without sysfs slaves). */
+export interface UnattributedStorage {
+    filesystemCount: number;
+    fsTotalBytes: number;
+    fsUsedBytes: number;
+    fsFreeBytes: number;
+}
+
+export interface StorageOverview {
+    generatedAt: string;             // ISO 8601
+    usageSource: StorageUsageSource;
+    classes: StorageClassSummary[];  // HDD, SSD, NVMe, Unknown — only types that have drives or filesystems
+    unattributed: UnattributedStorage | null;
+}

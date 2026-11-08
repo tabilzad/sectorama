@@ -33,6 +33,8 @@
 ## Features
 
 - **Drive discovery** — auto-detects all block devices via `smartctl --scan`
+- **Storage overview** — total, used and free space per drive class (hard drives / SATA SSDs / NVMe) on the
+  dashboard; see [Storage usage](#storage-usage) for the one mount it needs
 - **Position curve** — measures sequential read speed at evenly-spaced byte offsets to visualise the speed falloff
   from outer to inner tracks. Sample parameters are drive-type aware: QD 32 / 256 MiB per sample on NVMe,
   QD 1 / 128 MiB on HDD and SATA SSD
@@ -133,6 +135,8 @@ npm test            # backend unit + API validation tests
 | `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
 | `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
+| `STORAGE_MOUNT_ROOT`                  | `/mnt`                  | Filesystems mounted under this path are measured for used / free  |
+| `UNRAID_EMHTTP_DIR`                   | `/var/local/emhttp`     | Directory holding Unraid's `disks.ini`; used instead when present  |
 
 ---
 
@@ -142,6 +146,23 @@ npm test            # backend unit + API validation tests
 |-------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
 | **SQLite** (`better-sqlite3`) | Drive registry, benchmark run metadata, schedules, latest SMART cache, notification channels, subscriptions, per-drive alert thresholds |
 | **InfluxDB v2**               | SMART attribute history, benchmark speed points, benchmark profile results                                                              |
+
+---
+
+## Storage usage
+
+The dashboard's **Storage** panel groups drives by class (hard drives, SATA SSDs, NVMe) and shows raw capacity
+alongside used / free space. Raw capacity comes from the drive registry. Used and free come from the host's
+filesystems, which the container can only measure when they are visible inside it:
+
+| Host           | Add to the container's volumes                                        | What is measured                                                                                                            |
+|----------------|-----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| Unraid         | `/var/local/emhttp:/var/local/emhttp:ro`                              | Per-disk size / used / free straight from the array status (`disks.ini`). No data mounts needed; parity and flash are skipped |
+| Any Linux host | `/mnt:/mnt:ro` (or whichever paths you want, under `STORAGE_MOUNT_ROOT`) | Every filesystem on a real block device under that root, measured with `statfs` and attributed to a drive class through sysfs |
+
+Both lines are present, commented out, in the compose files. Filesystems whose backing drive cannot be identified
+(pools that expose no member information in sysfs) appear as **Other pools**. Without either mount the panel still
+shows raw capacity per class and explains how to enable usage.
 
 ---
 

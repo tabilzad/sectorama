@@ -23,6 +23,7 @@ import {
   useSaveDashboardLayout,
 } from '@/api/hooks/useDisks.ts';
 import StatCard from '../../components/ui/StatCard';
+import StorageOverview from '../../components/dashboard/StorageOverview';
 import DriveCard from '../../components/ui/DriveCard';
 import SortableDriveCard from '../../components/ui/SortableDriveCard';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
@@ -264,6 +265,9 @@ export default function DashboardPage() {
         <StatCard label="Failed"          value={stats?.failedDrives       ?? 0} />
         <StatCard label="Benchmark Runs"  value={stats?.totalBenchmarkRuns ?? 0} />
       </div>
+
+      {/* Storage capacity + usage per drive class */}
+      <StorageOverview />
 
       {/* Drive grid */}
       {!orderedDisks.length ? (

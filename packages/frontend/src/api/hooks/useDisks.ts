@@ -32,6 +32,7 @@ export function useScanDisks() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['disks'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['storage'] });
     },
   });
 }

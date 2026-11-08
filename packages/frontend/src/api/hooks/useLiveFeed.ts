@@ -56,6 +56,7 @@ export function useLiveFeed(): LiveFeedState {
         if (hasConnectedRef.current) {
           void queryClient.invalidateQueries({ queryKey: ['disks'] });
           void queryClient.invalidateQueries({ queryKey: ['stats'] });
+          void queryClient.invalidateQueries({ queryKey: ['storage'] });
         }
         hasConnectedRef.current = true;
       };
@@ -156,6 +157,7 @@ export function useLiveFeed(): LiveFeedState {
           if (event.type === 'disk_detected' || event.type === 'disk_removed') {
             void queryClient.invalidateQueries({ queryKey: ['disks'] });
             void queryClient.invalidateQueries({ queryKey: ['stats'] });
+            void queryClient.invalidateQueries({ queryKey: ['storage'] });
           }
         } catch {
           // Ignore malformed messages.
