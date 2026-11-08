@@ -113,6 +113,7 @@ npm run dev
 ```bash
 npm run build       # compiles shared → backend → frontend
 npm run typecheck   # type-check all workspaces without emitting
+npm test            # backend unit + API validation tests
 ```
 
 ---
