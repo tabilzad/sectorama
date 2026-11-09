@@ -91,6 +91,58 @@ Open **http://localhost:8888**, click **Scan for Drives**, then run a benchmark 
 
 ---
 
+## Install on Unraid
+
+[`docker-compose.unraid.yml`](docker-compose.unraid.yml) is the Quick Start stack adapted to Unraid. It runs Sectorama
+together with its InfluxDB database and differs from the generic file in three ways:
+
+- data lives under `/mnt/user/appdata` instead of in Docker volumes inside `docker.img`
+- the array status is mounted, so the dashboard's [Storage](#storage-usage) panel shows per-disk usage out of the box
+- the app container carries the labels that give it an icon and a **WebUI** link on the Docker tab
+
+Any compose front end works: the **Docker Compose Manager** plugin from Community Applications, a **Portainer** stack,
+or `docker compose` over SSH.
+
+1. Create a stack named `sectorama` and paste the contents of `docker-compose.unraid.yml` as its compose file
+   (Compose Manager: **Add New Stack**, then **Edit Stack → Compose File**).
+2. Add the stack's environment variables (Compose Manager: **Edit Stack → ENV File**; Portainer:
+   **Environment variables**):
+
+   ```ini
+   # Required. Any long random string, e.g. the output of: openssl rand -hex 32
+   INFLUXDB_TOKEN=change-me-long-random-string
+   # Optional. Benchmark schedules follow this time zone (default: UTC)
+   TZ=Europe/Berlin
+   # Optional. Login for the bundled InfluxDB's own UI (default: adminpass)
+   INFLUXDB_ADMIN_PASSWORD=change-me
+   ```
+
+3. Start the stack (Compose Manager: **Compose Up**), open `http://<server-ip>:8888` and click **Scan for Drives**.
+
+| Folder                                 | Contents                                                     |
+|----------------------------------------|--------------------------------------------------------------|
+| `/mnt/user/appdata/sectorama`          | SQLite database: drive registry, schedules, alerts, settings |
+| `/mnt/user/appdata/sectorama-influxdb` | InfluxDB data: SMART history and benchmark results           |
+
+Things to know:
+
+- **InfluxDB needs no manual setup.** The stack creates the organisation, bucket and token on the first start and does
+  not publish the database on the host; only Sectorama talks to it. The token, the admin password and the retention
+  period are applied on that first start only, so choose the token once: changing it later makes Sectorama send a
+  token the initialised database does not know.
+- **Stay on InfluxDB 2.x.** Sectorama queries with Flux, which InfluxDB 3 does not support. To use an InfluxDB 2.x
+  instance that is already running, delete the `influxdb` service and the app's `depends_on` block, then set the
+  app's `INFLUXDB_URL`, `INFLUXDB_ORG`, `INFLUXDB_BUCKET` and `INFLUXDB_TOKEN` to match it.
+- **Sleeping disks stay asleep.** SMART polls skip drives in standby by default. A benchmark has to read from the
+  drive, so it spins the disk up; keep that in mind when scheduling benchmarks.
+- **The container is privileged.** `smartctl` and `fio` need raw access to the block devices. All benchmark I/O is
+  read-only.
+- **Port 8888 already in use?** Change the left-hand side of the port mapping, for example `"8890:8888"`.
+- **Updating.** Pull the new images and recreate the stack: **Update Stack** in Compose Manager, or
+  `docker compose pull && docker compose up -d`.
+
+---
+
 ## Development Setup
 
 ```bash
@@ -134,6 +186,7 @@ npm test            # backend unit + API validation tests
 | `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
 | `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
+| `TZ`                                  | `UTC`                   | Time zone that benchmark schedules follow, e.g. `Europe/Berlin`   |
 | `STORAGE_MOUNT_ROOT`                  | `/mnt`                  | Filesystems mounted under this path are measured for used / free  |
 | `UNRAID_EMHTTP_DIR`                   | `/var/local/emhttp`     | Directory holding Unraid's `disks.ini`; used instead when present  |
 | `SMART_POLL_INTERVAL_MINUTES`         | _(unset)_               | Pins the SMART poll interval (see [Settings](#settings))          |
@@ -182,7 +235,8 @@ filesystems, which the container can only measure when they are visible inside i
 | Unraid         | `/var/local/emhttp:/var/local/emhttp:ro`                              | Per-disk size / used / free straight from the array status (`disks.ini`). No data mounts needed; parity and flash are skipped |
 | Any Linux host | `/mnt:/mnt:ro` (or whichever paths you want, under `STORAGE_MOUNT_ROOT`) | Every filesystem on a real block device under that root, measured with `statfs` and attributed to a drive class through sysfs |
 
-Both lines are present, commented out, in the compose files. Filesystems whose backing drive cannot be identified
+Both lines are present, commented out, in the compose files; `docker-compose.unraid.yml` ships with the Unraid
+line enabled. Filesystems whose backing drive cannot be identified
 (pools that expose no member information in sysfs) appear as **Other pools**. Without either mount the panel still
 shows raw capacity per class and explains how to enable usage.
 
