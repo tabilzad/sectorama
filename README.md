@@ -49,7 +49,9 @@
   middle-of-disk region to eliminate outer-track bias. Latency percentiles (P50 / P95 / P99 / P99.9) are
   recorded per profile. All benchmark I/O is strictly read-only, and only one benchmark runs at a time
   so concurrent jobs can never distort each other's results
-- **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time
+- **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time. Polls skip
+  drives that are in standby so monitoring never spins a disk up (switchable in Settings), and query only a
+  few drives at a time
 - **Benchmark schedules** — cron-based per-drive or global schedules
 - **Notifications** — alert channels (Webhook, Slack) with per-alert-type subscriptions; transition-only firing (once on
   condition onset, silent until it clears and re-triggers); per-drive temperature threshold overrides
@@ -132,6 +134,7 @@ npm test            # backend unit + API validation tests
 | `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
 | `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
 | `SMART_POLL_INTERVAL_MINUTES`         | `5`                     | SMART polling interval                                            |
+| `SMART_POLL_CONCURRENCY`              | `4`                     | Drives queried at the same time during a poll sweep               |
 | `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
 | `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
@@ -175,11 +178,18 @@ Sectorama can push alerts to external services when a drive's health or temperat
 | Type                 | Fires when…                                                              |
 |----------------------|--------------------------------------------------------------------------|
 | `smart_error`        | SMART self-assessment transitions from passing → failing                 |
-| `temperature`        | Drive temperature transitions from at-or-below the threshold to above it |
+| `smart_attribute`    | A predictive counter grows (reallocated, pending or uncorrectable sectors; NVMe media errors), an attribute starts reporting failure (ATA `when_failed`, NVMe critical warning or spare below threshold), or an advisory attribute needs attention (e.g. NVMe wear ≥ 90 %) |
+| `temperature`        | Drive temperature transitions from at-or-below the threshold to above it; the recovery below it is sent to the same channels |
+| `drive_missing`      | A registered drive is no longer listed by the host (checked before every SMART poll and at startup); its return is sent to the same channels |
 | `benchmark_complete` | A scheduled benchmark run finishes (completed or failed), with a summary report |
 
 Alerts are **transition-only**: they fire once when a condition first occurs and are silent until the condition clears
 and re-triggers. This prevents alert storms on every poll.
+
+Every alert is recorded in the **alert history** (Notifications page, `GET /api/v1/notifications/history`) together
+with the delivery state per channel. A delivery that fails is retried with increasing delays (1 min, 5 min, 15 min,
+1 h, 6 h) before it is given up, and deliveries left pending by a restart are retried on startup, so a webhook outage
+does not swallow a transition-only alert.
 
 ### Channel types
 

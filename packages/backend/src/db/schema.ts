@@ -126,6 +126,35 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
 });
 
+// ─── Alert history ────────────────────────────────────────────────────────────
+// Every alert that fired, and one delivery row per channel it was sent to.
+// Deliveries are retried with backoff by the delivery worker.
+
+export const alertEvents = sqliteTable('alert_events', {
+  id:            integer('id').primaryKey({ autoIncrement: true }),
+  type:          text('type').notNull(),                       // AlertEventType
+  driveId:       integer('drive_id').references(() => drives.driveId, { onDelete: 'set null' }),
+  driveSerial:   text('drive_serial').notNull(),
+  driveModel:    text('drive_model').notNull(),
+  message:       text('message').notNull(),
+  value:         real('value'),
+  threshold:     real('threshold'),
+  attribute:     text('attribute'),
+  previousValue: real('previous_value'),
+  createdAt:     text('created_at').notNull(),
+});
+
+export const alertDeliveries = sqliteTable('alert_deliveries', {
+  id:            integer('id').primaryKey({ autoIncrement: true }),
+  alertId:       integer('alert_id').notNull().references(() => alertEvents.id, { onDelete: 'cascade' }),
+  channelId:     integer('channel_id').notNull().references(() => notificationChannels.id, { onDelete: 'cascade' }),
+  status:        text('status').notNull().default('pending'),  // AlertDeliveryStatus
+  attempts:      integer('attempts').notNull().default(0),
+  lastError:     text('last_error'),
+  nextAttemptAt: text('next_attempt_at'),                      // null once sent or given up
+  sentAt:        text('sent_at'),
+});
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const drivesRelations = relations(drives, ({ one, many }) => ({
@@ -161,3 +190,5 @@ export type DriveAlertThresholdRow        = typeof driveAlertThresholds.$inferSe
 export type PushSubscriptionRow           = typeof pushSubscriptions.$inferSelect;
 export type SettingsRow                   = typeof settings.$inferSelect;
 export type DriveDisplayPrefsRow          = typeof driveDisplayPrefs.$inferSelect;
+export type AlertEventRow                 = typeof alertEvents.$inferSelect;
+export type AlertDeliveryRow              = typeof alertDeliveries.$inferSelect;

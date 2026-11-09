@@ -4,9 +4,11 @@ import { buildApp } from './app.js';
 import { initVapid } from './services/pushService.js';
 import { initSmartReplay } from './ws/liveFeed.js';
 import { initScheduler, initSmartPoller } from './services/scheduler.js';
-import { scanDisks, registerDrives } from './services/diskDiscovery.js';
+import { scanDisks } from './services/diskDiscovery.js';
+import { reconcileDrives } from './services/drivePresence.js';
 import { recoverOrphanedRuns } from './services/benchmarkEngine.js';
 import { refreshAllSmart, getAllCachedSmartEvents } from './services/smartService.js';
+import { startDeliveryWorker } from './services/notifications/notificationService.js';
 
 async function main() {
   // ── Initialize SQLite ──────────────────────────────────────────────────────
@@ -25,11 +27,16 @@ async function main() {
   const app = await buildApp();
 
   // ── Initial disk scan ──────────────────────────────────────────────────────
+  // Reconciled rather than just registered: a drive that disappeared while the
+  // service was down is reported now instead of being silently marked offline.
   console.log('[sectorama] Scanning for disks...');
   try {
     const discovered = await scanDisks();
-    await registerDrives(discovered);
-    console.log(`[sectorama] Found ${discovered.length} disk(s)`);
+    const changes    = await reconcileDrives(discovered);
+    console.log(
+      `[sectorama] Found ${discovered.length} disk(s)` +
+      (changes.removed.length ? `, ${changes.removed.length} missing since last run` : ''),
+    );
   } catch (err) {
     console.warn('[sectorama] Initial disk scan failed (non-fatal):', err);
   }
@@ -41,6 +48,7 @@ async function main() {
   // ── Start schedulers ──────────────────────────────────────────────────────
   await initScheduler();
   initSmartPoller();
+  startDeliveryWorker();   // retries alert deliveries that failed, including ones left over by a previous run
 
   // ── Initial SMART cache warm-up (non-blocking, runs in background) ────────
   // After warm-up, seed the WS replay map so clients connecting before the first

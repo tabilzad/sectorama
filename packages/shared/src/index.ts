@@ -187,10 +187,19 @@ export interface SystemStats {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export const ALERT_TYPES = ['smart_error', 'temperature', 'benchmark_complete'] as const;
+/**
+ * Subscribable alert families:
+ *   smart_error        — SMART overall self-assessment flips to FAILED
+ *   smart_attribute    — a predictive counter grows (reallocated / pending / uncorrectable)
+ *                        or an attribute starts reporting failure or needs attention
+ *   temperature        — above threshold, and the recovery below it
+ *   drive_missing      — a registered drive disappears from the host, and its return
+ *   benchmark_complete — scheduled benchmark reports
+ */
+export const ALERT_TYPES = ['smart_error', 'smart_attribute', 'temperature', 'drive_missing', 'benchmark_complete'] as const;
 export type AlertType = typeof ALERT_TYPES[number];
 /** Superset of AlertType — includes derived events that share a parent subscription. */
-export type AlertEventType = AlertType | 'temperature_recovery';
+export type AlertEventType = AlertType | 'temperature_recovery' | 'drive_returned';
 export const CHANNEL_TYPES = ['webhook', 'slack'] as const;
 export type ChannelType = typeof CHANNEL_TYPES[number];
 
@@ -241,7 +250,39 @@ export interface Alert {
     message: string;
     value?: number;
     threshold?: number;
+    /** smart_attribute alerts: the counter or attribute that changed. */
+    attribute?: string;
+    /** smart_attribute alerts: the value seen at the previous poll. */
+    previousValue?: number;
     timestamp: string;
+}
+
+export type AlertDeliveryStatus = 'pending' | 'sent' | 'failed';
+
+export interface AlertDeliverySummary {
+    channelId: number;
+    channelName: string;
+    status: AlertDeliveryStatus;
+    attempts: number;
+    lastError: string | null;
+    sentAt: string | null;
+    nextAttemptAt: string | null;
+}
+
+/** One fired alert with the delivery state per subscribed channel. */
+export interface AlertHistoryEntry {
+    id: number;
+    type: AlertEventType;
+    driveId: number | null;      // null once the drive has been removed from the registry
+    driveSerial: string;
+    driveModel: string;
+    message: string;
+    value: number | null;
+    threshold: number | null;
+    attribute: string | null;
+    previousValue: number | null;
+    createdAt: string;           // ISO 8601
+    deliveries: AlertDeliverySummary[];
 }
 
 export interface BenchmarkCompletePayload {
@@ -417,4 +458,14 @@ export interface StorageOverview {
     usageSource: StorageUsageSource;
     classes: StorageClassSummary[];  // HDD, SSD, NVMe, Unknown — only types that have drives or filesystems
     unattributed: UnattributedStorage | null;
+}
+
+// ─── SMART polling settings ───────────────────────────────────────────────────
+
+export interface SmartPollingSettings {
+    /**
+     * Skip drives that are in standby or sleep so a poll never spins them up.
+     * Their cached reading is kept until they wake. Default: true.
+     */
+    skipStandby: boolean;
 }

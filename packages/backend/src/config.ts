@@ -26,6 +26,8 @@ export const config = {
 
   smart: {
     pollIntervalMinutes: parseInt(env('SMART_POLL_INTERVAL_MINUTES', '5'), 10),
+    /** How many drives are queried at the same time during a poll sweep. */
+    pollConcurrency:     Math.max(1, parseInt(env('SMART_POLL_CONCURRENCY', '4'), 10) || 4),
   },
 
   benchmark: {

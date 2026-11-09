@@ -6,6 +6,7 @@ import {useToast} from '@/hooks/useToast.ts';
 import type {ChannelType} from '@sectorama/shared';
 import {ChannelRow} from "@/pages/Notifications/ChannelRow.tsx";
 import {PushNotificationsCard} from "@/pages/Notifications/PushNotificationsCard.tsx";
+import {AlertHistoryCard} from "@/pages/Notifications/AlertHistoryCard.tsx";
 
 export default function NotificationsPage() {
     const {data: channels, isLoading} = useChannels();
@@ -68,5 +69,7 @@ export default function NotificationsPage() {
                     ))
                 )}
             </div>
+
+            <AlertHistoryCard/>
         </div>
 }
