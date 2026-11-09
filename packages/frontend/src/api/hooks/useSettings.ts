@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { API } from '../endpoints';
-import type { SmartPollingSettings } from '@sectorama/shared';
+import type { RuntimeSettingsResponse, RuntimeSettingsUpdate } from '@sectorama/shared';
 
 export function useCommunitySharingEnabled() {
   return useQuery<{ enabled: boolean }>({
@@ -21,20 +21,26 @@ export function useSetCommunitySharingEnabled() {
   });
 }
 
-export function useSmartPollingSettings() {
-  return useQuery<SmartPollingSettings>({
-    queryKey: ['settings', 'smart-polling'],
-    queryFn:  () => api.get<SmartPollingSettings>(API.settings.smartPolling).then(r => r.data),
+/**
+ * Polling, benchmark and temperature defaults, with the built-in defaults and
+ * the fields pinned by the container environment. Also read by the drive and
+ * history pages for their temperature-zone fallbacks.
+ */
+export function useRuntimeSettings() {
+  return useQuery<RuntimeSettingsResponse>({
+    queryKey:  ['settings', 'runtime'],
+    queryFn:   () => api.get<RuntimeSettingsResponse>(API.settings.runtime).then(r => r.data),
+    staleTime: 60_000,
   });
 }
 
-export function useSetSmartPollingSettings() {
+export function useUpdateRuntimeSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (settings: SmartPollingSettings) =>
-      api.put<SmartPollingSettings>(API.settings.smartPolling, settings).then(r => r.data),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['settings', 'smart-polling'] });
+    mutationFn: (patch: RuntimeSettingsUpdate) =>
+      api.put<RuntimeSettingsResponse>(API.settings.runtime, patch).then(r => r.data),
+    onSuccess: data => {
+      queryClient.setQueryData(['settings', 'runtime'], data);
     },
   });
 }

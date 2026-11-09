@@ -6,6 +6,7 @@ import { benchmarkSchedules, drives } from '../../db/schema.js';
 import { rowToSchedule } from '../../db/mappers.js';
 import { registerSchedule, unregisterSchedule } from '../../services/scheduler.js';
 import { idParams, numPoints, nullableShortText, positiveInt } from '../schemas.js';
+import { getRuntimeSettings } from '../../services/settingsService.js';
 import type { BenchmarkSchedule } from '@sectorama/shared';
 
 interface IdParams { id: number }
@@ -47,7 +48,12 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req, reply) => {
-      const { driveId = null, cronExpression, numPoints = 11, label = null } = req.body;
+      const {
+        driveId = null,
+        cronExpression,
+        numPoints = getRuntimeSettings().benchmark.defaultNumPoints,
+        label = null,
+      } = req.body;
 
       if (!validate(cronExpression)) {
         return reply.status(400).send({ error: 'Invalid cron expression' });

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useDisks } from '@/api/hooks/useDisks.ts';
 import { useSchedules, useCreateSchedule, useUpdateSchedule, useDeleteSchedule } from '@/api/hooks/useSchedules.ts';
+import { useRuntimeSettings } from '@/api/hooks/useSettings';
+import { RUNTIME_SETTINGS_DEFAULTS } from '@sectorama/shared';
 import { FullPageSpinner } from '../../components/ui/LoadingSpinner';
 import ErrorMessage from '../../components/ui/ErrorMessage';
 import { FormInput } from '../../components/ui/FormInput';
@@ -17,14 +19,19 @@ import {
 export default function SchedulesPage() {
   const { data: schedules, isLoading, isError, refetch } = useSchedules();
   const { data: disks } = useDisks();
+  const { data: runtime } = useRuntimeSettings();
   const createSchedule = useCreateSchedule();
   const updateSchedule = useUpdateSchedule();
   const deleteSchedule = useDeleteSchedule();
 
+  const defaultNumPoints = runtime?.settings.benchmark.defaultNumPoints ?? RUNTIME_SETTINGS_DEFAULTS.benchmark.defaultNumPoints;
+
   const [newSchedule, setNewSchedule] = useState<StructuredSchedule>(DEFAULT_SCHEDULE);
   const [newLabel, setNewLabel]         = useState('');
   const [newDriveId, setNewDriveId]     = useState<number | ''>('');
-  const [newNumPoints, setNewNumPoints] = useState(11);
+  // null = follow the default from Settings until the user types a value.
+  const [newNumPoints, setNewNumPoints] = useState<number | null>(null);
+  const numPoints = newNumPoints ?? defaultNumPoints;
 
   if (isLoading) return <FullPageSpinner />;
   if (isError)   return <ErrorMessage message="Could not load schedules." retry={refetch} />;
@@ -33,13 +40,13 @@ export default function SchedulesPage() {
     await createSchedule.mutateAsync({
       driveId:        newDriveId !== '' ? newDriveId : undefined,
       cronExpression: scheduleToCron(newSchedule),
-      numPoints:      newNumPoints,
+      numPoints,
       label:          newLabel.trim() || undefined,
     });
     setNewSchedule(DEFAULT_SCHEDULE);
     setNewLabel('');
     setNewDriveId('');
-    setNewNumPoints(11);
+    setNewNumPoints(null);
   }
 
   function driveLabel(driveId: number | null): string {
@@ -95,10 +102,13 @@ export default function SchedulesPage() {
           <FormInput
             label="Points"
             type="number"
-            value={newNumPoints}
+            value={numPoints}
             min={2}
             max={100}
-            onChange={e => setNewNumPoints(parseInt(e.target.value, 10))}
+            onChange={e => {
+              const v = parseInt(e.target.value, 10);
+              setNewNumPoints(Number.isNaN(v) ? null : v);
+            }}
             className="w-full bg-surface-100 border border-surface-300 rounded-lg px-3 py-2
                        text-sm text-gray-200 focus:outline-none focus:border-accent"
           />

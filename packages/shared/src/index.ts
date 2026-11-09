@@ -498,7 +498,18 @@ export interface StorageOverview {
     unattributed: UnattributedStorage | null;
 }
 
-// ─── SMART polling settings ───────────────────────────────────────────────────
+// ─── Runtime settings ─────────────────────────────────────────────────────────
+// Tuning knobs that can be changed from the Settings page. Each has a built-in
+// default; some can also be pinned by an environment variable, in which case
+// the UI shows them read-only.
+
+/**
+ * Poll intervals offered in the UI. Values below 60 must divide an hour so
+ * the cron expression ticks evenly; values of 60 and above are whole hours.
+ */
+export const SMART_POLL_INTERVAL_CHOICES = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440] as const;
+
+export const SMART_POLL_CONCURRENCY_MAX = 16;
 
 export interface SmartPollingSettings {
     /**
@@ -506,4 +517,62 @@ export interface SmartPollingSettings {
      * Their cached reading is kept until they wake. Default: true.
      */
     skipStandby: boolean;
+    /** Minutes between scheduled SMART polls. Default: 5. */
+    intervalMinutes: number;
+    /** Drives queried at the same time during a poll sweep. Default: 4. */
+    concurrency: number;
 }
+
+export interface BenchmarkSettings {
+    /** Positions sampled per run when a request or schedule does not say otherwise. Default: 11. */
+    defaultNumPoints: number;
+}
+
+/**
+ * Temperature zones for drives without a per-drive override, in °C.
+ * `alertCelsius` is the temperature alert threshold; the others only colour
+ * the charts and cards.
+ */
+export interface TemperatureDefaults {
+    normalCelsius: number;   // Cold → Normal
+    warmCelsius: number;     // Normal → Warm
+    alertCelsius: number;    // Warm → Hot, and the alert threshold
+    tooHotCelsius: number;   // Hot → Too Hot
+}
+
+export interface RuntimeSettings {
+    smartPolling: SmartPollingSettings;
+    benchmark: BenchmarkSettings;
+    temperature: TemperatureDefaults;
+}
+
+/** Built-in defaults, shared so the UI can render sensibly before the server answers. */
+export const RUNTIME_SETTINGS_DEFAULTS: RuntimeSettings = {
+    smartPolling: { skipStandby: true, intervalMinutes: 5, concurrency: 4 },
+    benchmark:    { defaultNumPoints: 11 },
+    temperature:  { normalCelsius: 25, warmCelsius: 40, alertCelsius: 50, tooHotCelsius: 60 },
+};
+
+export type RuntimeSettingPath =
+    | 'smartPolling.skipStandby'
+    | 'smartPolling.intervalMinutes'
+    | 'smartPolling.concurrency'
+    | 'benchmark.defaultNumPoints'
+    | 'temperature.normalCelsius'
+    | 'temperature.warmCelsius'
+    | 'temperature.alertCelsius'
+    | 'temperature.tooHotCelsius';
+
+export interface RuntimeSettingsResponse {
+    /** Effective values: environment variable, then saved value, then default. */
+    settings: RuntimeSettings;
+    /** Built-in defaults, so the UI can show them and offer a reset. */
+    defaults: RuntimeSettings;
+    /** Fields pinned by an environment variable, with the variable's name. Shown read-only in the UI. */
+    managedByEnv: Partial<Record<RuntimeSettingPath, string>>;
+}
+
+/** Partial update: only the sections and fields present are changed. */
+export type RuntimeSettingsUpdate = {
+    [S in keyof RuntimeSettings]?: Partial<RuntimeSettings[S]>;
+};

@@ -50,8 +50,8 @@
   recorded per profile. All benchmark I/O is strictly read-only, and only one benchmark runs at a time
   so concurrent jobs can never distort each other's results
 - **SMART history** — scheduled polling stored in InfluxDB; attribute trends charted over time. Polls skip
-  drives that are in standby so monitoring never spins a disk up (switchable in Settings), and query only a
-  few drives at a time
+  drives that are in standby so monitoring never spins a disk up, and query only a few drives at a time;
+  interval, concurrency and the standby rule are all set from the Settings page
 - **Benchmark schedules** — cron-based per-drive or global schedules
 - **Notifications** — alert channels (Webhook, Slack) with per-alert-type subscriptions; transition-only firing (once on
   condition onset, silent until it clears and re-triggers); per-drive temperature threshold overrides
@@ -133,13 +133,32 @@ npm test            # backend unit + API validation tests
 | `INFLUXDB_ORG`                        | `sectorama`             | InfluxDB organisation                                             |
 | `INFLUXDB_BUCKET`                     | `sectorama`             | InfluxDB bucket                                                   |
 | `INFLUXDB_ADMIN_PASSWORD`             | `adminpass`             | Admin password for the bundled InfluxDB service                   |
-| `SMART_POLL_INTERVAL_MINUTES`         | `5`                     | SMART polling interval                                            |
-| `SMART_POLL_CONCURRENCY`              | `4`                     | Drives queried at the same time during a poll sweep               |
-| `BENCHMARK_NUM_POINTS`                | `11`                    | Number of positions sampled in each position-curve run            |
 | `DISK_DISCOVERY_MOCK`                 | `false`                 | Return synthetic drives/SMART/benchmark data (Windows/macOS dev)  |
-| `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | `50`                    | Global default temperature alert threshold; overridable per drive |
 | `STORAGE_MOUNT_ROOT`                  | `/mnt`                  | Filesystems mounted under this path are measured for used / free  |
 | `UNRAID_EMHTTP_DIR`                   | `/var/local/emhttp`     | Directory holding Unraid's `disks.ini`; used instead when present  |
+| `SMART_POLL_INTERVAL_MINUTES`         | _(unset)_               | Pins the SMART poll interval (see [Settings](#settings))          |
+| `SMART_POLL_CONCURRENCY`              | _(unset)_               | Pins the number of drives queried at the same time                |
+| `BENCHMARK_NUM_POINTS`                | _(unset)_               | Pins the default number of positions sampled per run              |
+| `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` | _(unset)_               | Pins the default temperature alert threshold                      |
+
+---
+
+## Settings
+
+Polling, benchmark and temperature defaults live on the **Settings** page and are stored in SQLite, so they survive
+restarts and need no redeploy to change:
+
+| Setting                 | Default | Notes                                                                                   |
+|-------------------------|---------|-----------------------------------------------------------------------------------------|
+| Skip drives in standby  | on      | Scheduled polls never spin a sleeping disk up                                           |
+| Poll interval           | 5 min   | Takes effect immediately; the poller is rescheduled without a restart                   |
+| Drives polled at once   | 4       | Upper bound on simultaneous `smartctl` processes                                        |
+| Default sample points   | 11      | Used by manual runs and new schedules that do not choose their own value                |
+| Temperature defaults    | 25 / 40 / 50 / 60 °C | Zones for drives without per-drive settings; the Warm → Hot boundary (50) is the alert threshold |
+
+The last four can also be **pinned** with the environment variables in the table above. A non-blank value wins over
+the UI and the field is shown read-only with the variable's name; unset or blank it to hand control back to the UI.
+The compose files pass the variables through from `.env` as blank-by-default, so an existing `.env` keeps working.
 
 ---
 
@@ -216,8 +235,9 @@ types. A test payload can be sent from the UI at any time.
 
 ### Temperature thresholds
 
-The global default is set via `TEMPERATURE_ALERT_THRESHOLD_CELSIUS` (default `50`°C). Individual drives can override
-this from the **Alert Settings** section on the Drive Detail → SMART tab.
+The default zones and alert threshold for all drives are set on the **Settings** page (default alert at `50`°C;
+pinnable with `TEMPERATURE_ALERT_THRESHOLD_CELSIUS`). Individual drives can override them from the
+**Temperature Settings** section on the Drive Detail → SMART tab.
 
 ### Adding a new channel type
 
