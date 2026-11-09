@@ -15,7 +15,7 @@ import { Toast } from '../../components/ui/Toast';
 import { useToast } from '@/hooks/useToast.ts';
 import { DriveAlertSettings } from './DriveAlertSettings';
 import { formatBytes } from '@/lib/formatBytes.ts';
-import type { SmartAttribute } from '@sectorama/shared';
+import { deriveHealth, type SmartAttribute } from '@sectorama/shared';
 
 // ── Skeleton placeholders shown while a benchmark is in progress ──────────────
 
@@ -161,10 +161,9 @@ export default function DriveDetailPage() {
   if (isLoading) return <FullPageSpinner />;
   if (isError || !drive) return <ErrorMessage message="Drive not found." retry={refetch} />;
 
-  const health: 'ok' | 'warning' | 'failed' | 'unknown' =
-    smart?.healthPassed === false ? 'failed'
-    : smart?.healthPassed === true  ? 'ok'
-    : 'unknown';
+  // Same rule as the dashboard badge and the live feed, so the header can never
+  // say PASSED while an attribute row below it is flagged.
+  const health = smart ? deriveHealth(smart) : 'unknown';
 
   const isNvme = drive.type === 'NVMe';
 
