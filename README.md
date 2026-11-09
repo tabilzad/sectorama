@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml/badge.svg)](https://github.com/tabilzad/sectorama/actions/workflows/ci.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/tabilzad/sectorama)](https://hub.docker.com/r/tabilzad/sectorama)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ---
 
 <div style="text-align: center;">
@@ -263,4 +263,4 @@ For larger changes, open an issue first to discuss the approach.
 
 ## License
 
-Released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0).
+Released under the [GNU General Public License v3.0](LICENSE).
